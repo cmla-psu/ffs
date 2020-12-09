@@ -68,10 +68,10 @@ function diag_inv_prod(A::FFSDenseMatrix, S::Sigma)::Array{Float64,1}
    # For dense matrices, we compute the squared norm of each column of A * lower
 
    halfway_t = S.lower \ A.mat'  # next compute squared norm of each column
-   result = zeros(Float64, size(halfway, 2)) # same dim as num cols
-   for col in 1:size(halfway, 2) # matrix in column major layout
-       for row in 1:size(halfway, 1)
-           result[col] += halfway[row, col]^2
+   result = zeros(Float64, size(halfway_t, 2)) # same dim as num cols
+   for col in 1:size(halfway_t, 2) # matrix in column major layout
+       for row in 1:size(halfway_t, 1)
+           result[col] += halfway_t[row, col]^2
        end
    end
    result
