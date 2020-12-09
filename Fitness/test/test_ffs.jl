@@ -1,12 +1,11 @@
-include("fitness.jl")
 import LinearAlgebra
 using Test
-using .Fitness
+using Fitness
 
 @testset "test_fast_helpers" begin
   B = [1. 1. 1. 1.; 1. 1. 1. 0.; 1. 1. 0. 0.; 1. 0. 0. 0.]
-  BT = Fitness.FFSDenseMatrix(B')
-  L = Fitness.FFSDenseMatrix([1. 2. 3. 4.; 4. 3. 2. 1.; 1. 0. 0. 1.; 1. 2. 1. 2.; 1. 1. 1. 1.])
+  BT = FFSDenseMatrix(B')
+  L = FFSDenseMatrix([1. 2. 3. 4.; 4. 3. 2. 1.; 1. 0. 0. 1.; 1. 2. 1. 2.; 1. 1. 1. 1.])
   cov = [2. 1. 1. 1.; 1. 2. 1. 1.; 1. 1. 2. 1.; 1. 1. 1. 2.]
   (result, lower) = Fitness.check_pos_def(cov)
   S = Fitness.Sigma(cov, lower)

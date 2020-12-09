@@ -2,3 +2,7 @@ name = "Fitness"
 uuid = "7875dd9b-8150-4b09-a770-3789a4f319a3"
 authors = ["Daniel Kifer <dkifer@cse.psu.edu>"]
 version = "0.1.0"
+
+[deps]
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
