@@ -1,0 +1,4 @@
+name = "Fitness"
+uuid = "7875dd9b-8150-4b09-a770-3789a4f319a3"
+authors = ["Daniel Kifer <dkifer@cse.psu.edu>"]
+version = "0.1.0"
