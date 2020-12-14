@@ -15,8 +15,8 @@ const COL=1
   S = Fitness.Sigma(cov, lower)
   c = [1.0, 1.5, 2.0, 2.5, 3.0]
 
-  @test diag_prod(L, S, c) ≈ LinearAlgebra.diag(L.mat * S.cov * L.mat')./c atol=tolerance
-  @test diag_inv_prod(BT, S) ≈ LinearAlgebra.diag(BT.mat * inv(S.cov) * BT.mat') atol=tolerance
+  @test Fitness.diag_prod(L, S, c) ≈ LinearAlgebra.diag(L.mat * S.cov * L.mat')./c atol=tolerance
+  @test Fitness.diag_inv_prod(BT, S) ≈ LinearAlgebra.diag(BT.mat * inv(S.cov) * BT.mat') atol=tolerance
 end
 
 @testset "test_helper_functions" begin

@@ -20,14 +20,14 @@ abstract type FFSMatrix end
 The default structure for a dense matrix
 """
 struct FFSDenseMatrix <: FFSMatrix
-   mat::Array{Float64,2}
+   mat::Matrix{Float64}
 end
 
 
 """
 Types allowed for the covariance matrix
 """
-CovType = Array{Float64, 2}
+CovType = Matrix{Float64}
 
 
 """
@@ -37,7 +37,7 @@ representation matrix, and target cost vector.
 struct FFSParams
    BT::FFSMatrix # B transpose
    L::FFSMatrix # L
-   c::Array{Float64,1} # target variances
+   c::Vector{Float64} # target variances
 end
 
 
@@ -46,7 +46,7 @@ Keeps track of the covariance matrix and its cholesky decomposition.
 """
 struct Sigma
    cov::CovType # the covariance matrix
-   lower::Array{Float64,2} # the lower triangular matrix from its cholesky decomposition
+   lower::Matrix{Float64} # the lower triangular matrix from its cholesky decomposition
 end
 
 
@@ -71,17 +71,11 @@ for speed.
 """
 function diag_prod(A::FFSDenseMatrix,
                    S::Sigma,
-                   c::Union{Float64, Array{Float64,1}})::Array{Float64,1}
+                   c::Union{Float64, Vector{Float64}})::Vector{Float64}
 
-   halfway = A.mat * S.lower # next compute squared norm of each row
-   result = zeros(Float64, size(halfway, ROW)) # same dim as num rows
-   for col in START:size(halfway, COL) # matrix in column major layout
-       for row in START:size(halfway, ROW)
-           result[row] += halfway[row, col]^2
-       end
-   end
-   result ./= c
-   result
+    result = row_sq_norm(A.mat * S.lower)
+    result ./= c
+    result
 end
 
 
@@ -93,27 +87,56 @@ where ``lower`` is the lower triangular matrix of the cholesky decomposition
 of the covariance `S`. This should be specialized to other matrix representations
 for speed.
 """
-function diag_inv_prod(A::FFSDenseMatrix, S::Sigma)::Array{Float64,1}
-   halfway_t = S.lower \ A.mat'  # next compute squared norm of each column
-   result = zeros(Float64, size(halfway_t, COL)) # same dim as num cols
-   for col in START:size(halfway_t, COL) # matrix in column major layout
-       for row in START:size(halfway_t, ROW)
-           result[col] += halfway_t[row, col]^2
-       end
-   end
-   result
+function diag_inv_prod(A::FFSDenseMatrix, S::Sigma)::Vector{Float64}
+   col_sq_norm(S.lower \ A.mat')
 end
 
 
+#"""
+#For each row bt_i of BT, computes sum_i weights[i] S^{-1} bt_i' bt_i S^{-1}
+#"""
+#function weighted_grad_helper(BT::FFSMatrix, S::Sigma; t, weights::Vector{Float64})
+#    weighted_B = BT.mat' .* weights # weight the columns of BT.mat'
+#    inner = weighted_B * BT.mat
+#    Linv = inv(S.lower)
+#end
 #############################
 # Helper functions
 ############################
 
 """
+Computes the squared L2 norms of each row of `mat`
+"""
+function row_sq_norm(mat::Matrix{Float64})::Vector{Float64}
+    result = zeros(Float64, size(mat, ROW)) # same dim as num rows
+    for col in START:size(mat, COL) # matrix in column major layout
+        for row in START:size(mat, ROW)
+            result[row] += mat[row, col]^2
+        end
+    end
+    result
+end
+
+
+"""
+Computes the squared L2 norms of each column of `mat`
+"""
+function col_sq_norm(mat::Matrix{Float64})::Vector{Float64}
+    result = zeros(Float64, size(mat, COL)) # same dim as num rows
+    for col in START:size(mat, COL) # matrix in column major layout
+        for row in START:size(mat, ROW)
+            result[col] += mat[row, col]^2
+        end
+    end
+    result
+end
+
+
+"""
 Symmetrizes `S`. Useful for when rounding error causes the matrix to not be
 symmetric.
 """
-function symmetrize(S::Array{Float64,2})::Array{Float64,2}
+function symmetrize(S::Matrix{Float64})::Matrix{Float64}
    # makes sure the matrix S is symmetric
    (S' .+ S) ./ 2
 end
@@ -127,7 +150,7 @@ If yes, returns (true, lower) where lower is the lower triangular matrix of the
 
 If no, returns (false, [NaN]).
 """
-function check_pos_def(cov::CovType)::Tuple{Bool,Array{Float64,2}}
+function check_pos_def(cov::CovType)::Tuple{Bool,Matrix{Float64}}
    info = cholesky(cov; check=false) # don't throw exception
    if issuccess(info)
       (true, info.L)
@@ -140,7 +163,7 @@ end
 """
 Computes the softmax of `x` with temperature parameter t: ``(1/t) log(sum_{i=1}^n e^(t * x[i]))``
 """
-function softmax(x::Array{Float64,1}, t::Float64)::Float64
+function softmax(x::Vector{Float64}, t::Float64)::Float64
     themax = maximum(x)
     sm = themax + log(sum(elt ->  exp(t*(elt - themax)), x))/t
     sm
@@ -152,7 +175,7 @@ end
 function gradient(params::FFSParams,
                   S::Sigma;
                   tb::Float64,
-                  tl::Float64)::Array{Float64,2}
+                  tl::Float64)::Matrix{Float64}
   #TODO
 end
 
@@ -191,8 +214,8 @@ end
 
 function line_search(params::FFSParams,
 		     S::Sigma,
-		     direction::Array{Float64,2},
-		     gradient::Array{Float64,2};
+		     direction::Matrix{Float64},
+		     gradient::Matrix{Float64};
 		     tb::Float64,
 		     tl::Float64,
 		     dec::Float64 = 0.01,
@@ -258,7 +281,7 @@ Returns a rescaled covariance matrix so that the mechanism
 `L` is the representation matrix, `cov` is the unscaled covariance
 matrix and `c` is the target ffs variance.
 """
-function enforce_ffs(L::FFSMatrix, cov::CovType, c::Array{Float64,1})::CovType
+function enforce_ffs(L::FFSMatrix, cov::CovType, c::Vector{Float64})::CovType
     overrun = ffs_overrun(L, cov, c)
     cov / overrun
 end
@@ -287,7 +310,7 @@ Returns the variance of each workload query for the Gaussian mechanism
     ``M(x) = L(Bx +N(0, cov))`` where `L` is the representation matrix
     and `cov` is the covariance matrix
 """
-function l2error_vector(L::FFSMatrix, cov::CovType)::Array{Float64,1}
+function l2error_vector(L::FFSMatrix, cov::CovType)::Vector{Float64}
     (result, lower) = check_pos_def(cov)
     @assert result "Covariance must be positive definite"
     l_vec = diag_prod(L, Sigma(cov, lower), 1.0)
@@ -306,7 +329,7 @@ that every query is more accurate than required.
 """
 function ffs_overrun(L::FFSMatrix,
                      cov::CovType,
-                     c::Union{Float64, Array{Float64,1}})::Float64
+                     c::Union{Float64, Vector{Float64}})::Float64
     # Computes max ratio of variance to target variaance
     # at a given privacy cost
     l_vec = l2error_vector(L, cov) ./ c
@@ -320,8 +343,6 @@ end
 export ffs_optimize,
        FFSMatrix,
        FFSDenseMatrix,
-       diag_prod,
-       diag_inv_prod,
        privacy_cost,
        l2error_vector,
        ffs_overrun,
