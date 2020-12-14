@@ -137,20 +137,30 @@ function check_pos_def(cov::CovType)::Tuple{Bool,Array{Float64,2}}
 end
 
 
+"""
+Computes the softmax of `x` with temperature parameter t: ``(1/t) log(sum_{i=1}^n e^(t * x[i]))``
+"""
 function softmax(x::Array{Float64,1}, t::Float64)::Float64
     themax = maximum(x)
     sm = themax + log(sum(elt ->  exp(t*(elt - themax)), x))/t
-    sm #TODO
+    sm
 end
 #####################################
 # Gradient and Hessian Calculations
 #####################################
 
-function gradient()
+function gradient(params::FFSParams,
+                  S::Sigma;
+                  tb::Float64,
+                  tl::Float64)::Array{Float64,2}
   #TODO
 end
 
-function hess_times_vec()
+function hess_times_vec(thevec::Array{64,2},
+                        params::FFSParams,
+                        S::Sigma;
+                        tb::Float64,
+                        tl::Float64)::Float64
    #TODO
 end
 

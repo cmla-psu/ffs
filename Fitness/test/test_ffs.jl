@@ -37,13 +37,16 @@ end
 
     (result3, lower3) = Fitness.check_pos_def(OtherS)
     @test !result3
+
+    x1 = [5.0]
+    @test Fitness.softmax(x1, 2.5) ≈ x1[1] atol=tolerance
+    @test Fitness.softmax(x1 .+ 1.5, 3.0) ≈ x1[1] + 1.5 atol=tolerance
+    x2 = rand(10)
+    t = 4.3
+    @test Fitness.softmax(x2, t) ≈ log(sum(exp.(x2 * t)))/t
 end
 
 
-@testset "gradient_and_hessian" begin
-    return
-    using Zygote
-end
 
 @testset "optimization" begin
    # TODO test objective function
