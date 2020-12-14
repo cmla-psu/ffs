@@ -2,6 +2,9 @@ import LinearAlgebra
 using Test
 using Fitness
 
+const ROW=1
+const COL=1
+
 @testset "test_fast_helpers" begin
   tolerance = 1e-6
   B = [1. 1. 1. 1.; 1. 1. 1. 0.; 1. 1. 0. 0.; 1. 0. 0. 0.]
@@ -37,14 +40,86 @@ end
 end
 
 
-@test "gradient_and_hessian" begin
+@testset "gradient_and_hessian" begin
+    return
+    using Zygote
+end
+
+@testset "optimization" begin
+   # TODO test objective function
+end
+
+@testset "problem conversion" begin
+    tolerance = 1e-7
+    Brand = rand(4,5) # B
+    BT = FFSDenseMatrix(Brand')
+    cov1 = zeros(4,4)
+    for i in 1:size(cov1, 1)
+        cov1[i,i]=1.0
+    end
+    tmp = rand(4,4)
+    cov2 = tmp' * tmp
+    Lrand = rand(8,4)
+    L = FFSDenseMatrix(Lrand)
+    c1 = [1., 2., 3., 4., 5., 6., 7., 8.]
+    c2 = ones(8)
+
+    new_cov1 = enforce_pcost(BT, cov1, 0.1)
+    @test privacy_cost(BT, new_cov1) ≈ 0.1
+    new_cov1_again = enforce_pcost(BT, 2*cov1, 0.1)
+    @test privacy_cost(BT, new_cov1_again) ≈ 0.1
+    new_cov2 = enforce_pcost(BT, cov2, 0.1)
+    @test privacy_cost(BT, new_cov2) ≈ 0.1
+    new_cov2_again = enforce_pcost(BT, 2*cov2, 0.1)
+    @test privacy_cost(BT, new_cov2_again) ≈ 0.1
+
+    ffs_cov1_1 = enforce_ffs(L, cov1, c1)
+    @test ffs_overrun(L, ffs_cov1_1, c1) ≈ 1.0
+    ffs_cov1_1_again = enforce_ffs(L, 2*cov1, c1)
+    @test ffs_overrun(L, ffs_cov1_1_again, c1) ≈ 1.0
+    ffs_cov1_2 = enforce_ffs(L, cov1, c2)
+    @test ffs_overrun(L, ffs_cov1_2, c2) ≈ 1.0
+    ffs_cov1_2_again = enforce_ffs(L, 2*cov1, c2)
+    @test ffs_overrun(L, ffs_cov1_2_again, c2) ≈ 1.0
+
+    ffs_cov2_1 = enforce_ffs(L, cov2, c1)
+    @test ffs_overrun(L, ffs_cov2_1, c1) ≈ 1.0
+    ffs_cov2_1_again = enforce_ffs(L, 2*cov2, c1)
+    @test ffs_overrun(L, ffs_cov2_1_again, c1) ≈ 1.0
+    ffs_cov2_2 = enforce_ffs(L, cov2, c2)
+    @test ffs_overrun(L, ffs_cov2_2, c2) ≈ 1.0
+    ffs_cov2_2_again = enforce_ffs(L, 2*cov2, c2)
+    @test ffs_overrun(L, ffs_cov2_2_again, c2) ≈ 1.0
+
 
 end
 
-@test "optimization" begin
+@testset "measures" begin
+    tolerance = 1e-7
+    Brand = rand(4,5) # B
+    BT1 = FFSDenseMatrix(Brand')
+    cov1 = zeros(4,4)
+    for i in 1:size(cov1, 1)
+        cov1[i,i]=1.0
+    end
+    tmp = rand(4,4)
+    cov2 = tmp' * tmp
+    Lrand = rand(8,4)
+    L = FFSDenseMatrix(Lrand)
+    c1 = [1., 2., 3., 4., 5., 6., 7., 8.]
+    c2 = ones(8)
 
-end
+    # if covariance is identity, privacy cost is square root of largest column norm of B
+    @test privacy_cost(BT1, cov1) ≈ sqrt(maximum(sum(Brand .* Brand, dims=ROW))) atol=tolerance
+    @test privacy_cost(BT1, cov2) ≈ sqrt(maximum(LinearAlgebra.diag(Brand' * inv(cov2) * Brand))) atol=tolerance
 
-@test "measures" begin
-    
+    @test l2error_vector(L, cov1) ≈ LinearAlgebra.diag(Lrand * cov1 * Lrand') atol = tolerance
+    @test l2error_vector(L, cov2) ≈ LinearAlgebra.diag(Lrand * cov2 * Lrand') atol = tolerance
+
+    @test ffs_overrun(L, cov1, c1) ≈ maximum(LinearAlgebra.diag(Lrand * cov1 * Lrand')./c1) atol = tolerance
+    @test ffs_overrun(L, cov1, c2) ≈ maximum(LinearAlgebra.diag(Lrand * cov1 * Lrand')./c2) atol = tolerance
+    @test ffs_overrun(L, cov2, c1) ≈ maximum(LinearAlgebra.diag(Lrand * cov2 * Lrand')./c1) atol = tolerance
+    @test ffs_overrun(L, cov2, c2) ≈ maximum(LinearAlgebra.diag(Lrand * cov2 * Lrand')./c2) atol = tolerance
+
+
 end
