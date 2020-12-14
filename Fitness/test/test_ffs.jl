@@ -5,18 +5,41 @@ using Fitness
 const ROW=1
 const COL=1
 
-@testset "test_fast_helpers" begin
-  tolerance = 1e-6
-  B = [1. 1. 1. 1.; 1. 1. 1. 0.; 1. 1. 0. 0.; 1. 0. 0. 0.]
-  BT = FFSDenseMatrix(B')
-  L = FFSDenseMatrix([1. 2. 3. 4.; 4. 3. 2. 1.; 1. 0. 0. 1.; 1. 2. 1. 2.; 1. 1. 1. 1.])
-  cov = [2. 1. 1. 1.; 1. 2. 1. 1.; 1. 1. 2. 1.; 1. 1. 1. 2.]
-  (result, lower) = Fitness.check_pos_def(cov)
-  S = Fitness.Sigma(cov, lower)
-  c = [1.0, 1.5, 2.0, 2.5, 3.0]
+@testset "test_fast_helpers_functions" begin
+    tolerance = 1e-6
+    B = [1. 1. 1. 1.; 1. 1. 1. 0.; 1. 1. 0. 0.; 1. 0. 0. 0.]
+    BT = FFSDenseMatrix(B)
+    L = FFSDenseMatrix([1. 2. 3. 4.; 4. 3. 2. 1.; 1. 0. 0. 1.; 1. 2. 1. 2.; 1. 1. 1. 1.])
+    cov = [2. 1. 1. 1.; 1. 2. 1. 1.; 1. 1. 2. 1.; 1. 1. 1. 2.]
+    (result, lower) = Fitness.check_pos_def(cov)
+    S = Fitness.Sigma(cov, lower)
+    c = [1.0, 1.5, 2.0, 2.5, 3.0]
 
-  @test Fitness.diag_prod(L, S, c) ≈ LinearAlgebra.diag(L.mat * S.cov * L.mat')./c atol=tolerance
-  @test Fitness.diag_inv_prod(BT, S) ≈ LinearAlgebra.diag(BT.mat * inv(S.cov) * BT.mat') atol=tolerance
+    @test Fitness.diag_prod(L, S, c) ≈ LinearAlgebra.diag(L.mat * S.cov * L.mat')./c atol=tolerance
+    @test Fitness.diag_inv_prod(BT, S) ≈ LinearAlgebra.diag(B' * inv(S.cov) * B) atol=tolerance
+
+    B2 = rand(4,5)
+    tmp2 = rand(4,4)
+    cov2 = tmp2' * tmp2
+    invcov2 = inv(cov2)
+    (_, lower2) = Fitness.check_pos_def(cov2)
+    S2 = Fitness.Sigma(cov2, lower2)
+    L2 = rand(8,4)
+    weightB = rand(5)
+    weightL = rand(8)
+    #sum_i weights[i] S^{-1} b_i bt_i' S^{-1} where the b_i are columns of B
+    helperB = zeros(4,4)
+    for i in 1:5
+        helperB += invcov2 * B2[:,i] * B2[:,i]' * invcov2 * weightB[i]
+    end
+    @test Fitness.weighted_grad_helper_B(FFSDenseMatrix(B2), S2, weightB) ≈ helperB
+
+    helperL = zeros(4,4)
+    for i in 1:8
+        helperL += L2[i,:] * L2[i,:]' * weightL[i]
+    end
+
+    @test Fitness.weighted_grad_helper_L(FFSDenseMatrix(L2), weightL) ≈ helperL
 end
 
 @testset "test_helper_functions" begin
@@ -44,6 +67,11 @@ end
     x2 = rand(10)
     t = 4.3
     @test Fitness.softmax(x2, t) ≈ log(sum(exp.(x2 * t)))/t
+
+    M = [1. 2. 3. 4.; 5. 6. 7. 8.]
+    @test Fitness.col_sq_norm(M) ≈ [26., 40., 58., 80.] atol=tolerance
+    @test Fitness.row_sq_norm(M) ≈ [30., 174.] atol=tolerance
+
 end
 
 
@@ -55,7 +83,7 @@ end
 @testset "problem conversion" begin
     tolerance = 1e-7
     Brand = rand(4,5) # B
-    BT = FFSDenseMatrix(Brand')
+    BT = FFSDenseMatrix(Brand)
     cov1 = zeros(4,4)
     for i in 1:size(cov1, 1)
         cov1[i,i]=1.0
@@ -100,7 +128,7 @@ end
 @testset "measures" begin
     tolerance = 1e-7
     Brand = rand(4,5) # B
-    BT1 = FFSDenseMatrix(Brand')
+    BT1 = FFSDenseMatrix(Brand)
     cov1 = zeros(4,4)
     for i in 1:size(cov1, 1)
         cov1[i,i]=1.0

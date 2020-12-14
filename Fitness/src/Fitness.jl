@@ -35,7 +35,7 @@ Keeps track of the problem settings, including the basis matrix,
 representation matrix, and target cost vector.
 """
 struct FFSParams
-   BT::FFSMatrix # B transpose
+   B::FFSMatrix # B
    L::FFSMatrix # L
    c::Vector{Float64} # target variances
 end
@@ -80,7 +80,7 @@ end
 
 
 """
-Returns the diagonal of ``A S^{-1} A'``.
+Returns the diagonal of ``A' S^{-1} A``.
 For dense matrices, we compute the squared norm of each column of ``x``, where ``x`` is obtained
 by solving ``lower x = A`` through forward substitution,
 where ``lower`` is the lower triangular matrix of the cholesky decomposition
@@ -88,18 +88,28 @@ of the covariance `S`. This should be specialized to other matrix representation
 for speed.
 """
 function diag_inv_prod(A::FFSDenseMatrix, S::Sigma)::Vector{Float64}
-   col_sq_norm(S.lower \ A.mat')
+   col_sq_norm(S.lower \ A.mat)
 end
 
 
-#"""
-#For each row bt_i of BT, computes sum_i weights[i] S^{-1} bt_i' bt_i S^{-1}
-#"""
-#function weighted_grad_helper(BT::FFSMatrix, S::Sigma; t, weights::Vector{Float64})
-#    weighted_B = BT.mat' .* weights # weight the columns of BT.mat'
-#    inner = weighted_B * BT.mat
-#    Linv = inv(S.lower)
-#end
+"""
+For each column b_i of B, computes ``sum_i weights[i] S^{-1} b_i bt_i' S^{-1}``,
+which is the same as S^{-1} B diag(weights) B' S^{-1}. Specialize the method
+for faster operations
+"""
+function weighted_grad_helper_B(B::FFSMatrix, S::Sigma, weights::Vector{Float64})
+    left = (S.lower' \ (S.lower \ B.mat))
+    (weights' .* left ) * left'
+end
+
+"""
+For each row v_i of L, computes ``sum_i weights[i] v_i' v``
+which is the same as ``L' diag(weights) L``. Specialize the method for faster operations
+"""
+function weighted_grad_helper_L(L::FFSMatrix, weights::Vector{Float64})
+    (weights' .* L.mat') * L.mat
+end
+
 #############################
 # Helper functions
 ############################
@@ -171,15 +181,26 @@ end
 #####################################
 # Gradient and Hessian Calculations
 #####################################
-
-function gradient(params::FFSParams,
+"""
+Computes the gradient of the objective function
+"""
+function ffs_gradient(params::FFSParams,
                   S::Sigma;
                   tb::Float64,
                   tl::Float64)::Matrix{Float64}
-  #TODO
+    l_diag = diag_prod(params.L, S, params.c)
+    l_max = maximum(l_diag)
+    b_diag = diag_inv_prod(params.B, S)
+    b_max = maximum(b_diag)
+    weightsL = exp.((l_diag .- l_max) .* tl)
+    weightsL ./= sum(weightsL)
+    weightsL ./= params.c
+    weightsB = exp.((b_diag .- b_max) .* tb)
+    weightsB ./= sum(weightsB)
+    -weighted_grad_helper_B(params.B, S, weightsB) + weighted_grad_helper_L(params.L, weightsL)
 end
 
-function hess_times_vec(thevec::Array{64,2},
+function hess_times_vec(thevec::Vector{Float64},
                         params::FFSParams,
                         S::Sigma;
                         tb::Float64,
@@ -206,7 +227,7 @@ function objective(params::FFSParams, S::Sigma; tb::Float64, tl::Float64)::Float
    # tb is the multiplier for the basis matrix part of the objective function
    # tl is the multiplier for the fitness-for-use constraint part of the objective function
 
-   b_diag = diag_inv_prod(params.BT, S) # diagonal of BT * S * B
+   b_diag = diag_inv_prod(params.B, S) # diagonal of B' * S * B
    l_diag = diag_prod(params.L, S, params.c) # diagonal of L * S * LT
    softmax(b_diag, tb) + softmax(l_diag, tl) #TODO
 end
@@ -227,7 +248,7 @@ function line_search(params::FFSParams,
    # dec is part of the sufficient decrease condition
    # beta is the candidate step size multiplier
 
-   alpha = 1.0
+   alpha = 1.0 #TDOD test
    fcurr = objective(params, S, tb=tb, tl=tl)
    done = false
    result = S
@@ -266,11 +287,11 @@ end
 """
 Returns a rescaled covariance matrix so that the mechanism
 ``M(x) = L(Bx +N(0, cov))`` has the desired target privacy cost.
-`BT` is the transpose of the basis matrix, `cov` is the unscaled covariance
+`B` is the basis matrix, `cov` is the unscaled covariance
 matrix and `privcost` is the target privacy cost.
 """
-function enforce_pcost(BT::FFSMatrix, cov::CovType, privcost::Float64)::CovType
-   actualcost = privacy_cost(BT, cov)
+function enforce_pcost(B::FFSMatrix, cov::CovType, privcost::Float64)::CovType
+   actualcost = privacy_cost(B, cov)
    cov * (actualcost/privcost)^2
 end
 
@@ -294,12 +315,12 @@ end
 Returns the privacy cost (total precision, generalization of
 L2 sensitivity) of a mechanism that adds Gaussian noise with covariance
 `cov` to query answers answered with ``B``, where ``B`` is the basis
-matrix whose transpose is `BT`.
+matrix.
 """
-function privacy_cost(BT::FFSMatrix, cov::CovType)::Float64
+function privacy_cost(B::FFSMatrix, cov::CovType)::Float64
     (result, lower) = check_pos_def(cov)
     @assert result "Covariance must be positive definite"
-    profile = diag_inv_prod(BT, Sigma(cov, lower))
+    profile = diag_inv_prod(B, Sigma(cov, lower))
     cost = sqrt(maximum(profile))
     cost
 end
