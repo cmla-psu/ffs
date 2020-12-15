@@ -3,7 +3,7 @@ using Test
 using Fitness
 using Zygote
 
-@testset "gradient" begin
+@testset "gradient and hessian" begin
     tolerance = 1e-7
     function obj(cov)
         log(sum(exp.(diag(Brand' * inv(cov) * Brand) .* t1)))/t1 +
@@ -54,8 +54,4 @@ using Zygote
     g2 = gradient(obj, cov2)[1]
     g2_ffs = Fitness.ffs_gradient(Fitness.FFSParams(B, L, c), S2, tb=t1, tl=t2)
     @test g2 ≈ g2_ffs atol=tolerance
-end
-
-@testset "hessian" begin
-    tolerance = 1e-7
 end

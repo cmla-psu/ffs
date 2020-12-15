@@ -39,7 +39,7 @@ const COL=1
         helperL += L2[i,:] * L2[i,:]' * weightL[i]
     end
 
-    @test Fitness.weighted_grad_helper_L(FFSDenseMatrix(L2), weightL) ≈ helperL
+    @test Fitness.weightedLTL(FFSDenseMatrix(L2), weightL) ≈ helperL
 end
 
 @testset "test_helper_functions" begin

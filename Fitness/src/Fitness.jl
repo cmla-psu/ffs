@@ -1,5 +1,6 @@
 module Fitness
 using LinearAlgebra
+include("FFSMatrix.jl")
 
 const START = 1 #starting index
 const ROW = 1 # first dimension is ROW
@@ -15,12 +16,6 @@ Base type for L and B matrices. Extend this for subtypes that have fast
 abstract type FFSMatrix end
 
 
-"""
-The default structure for a dense matrix
-"""
-struct FFSDenseMatrix <: FFSMatrix
-   mat::Matrix{Float64}
-end
 
 
 """
@@ -40,6 +35,7 @@ struct FFSParams
 end
 
 
+
 """
 Keeps track of the covariance matrix and its cholesky decomposition.
 """
@@ -49,6 +45,7 @@ struct Sigma
    lowerinv::Matrix{Float64}
    Sigma(c, l) = new(c, l, l \ I)
 end
+
 
 
 
@@ -75,7 +72,7 @@ function diag_prod(L::FFSDenseMatrix,
                    S::Sigma,
                    c::Union{Float64, Vector{Float64}})::Vector{Float64}
 
-    result = row_sq_norm(L.mat * S.lower)
+    result = row_sq_norm(L * S.lower)
     result ./= c
     result
 end
@@ -89,7 +86,7 @@ where ``lower`` is the lower triangular matrix of the cholesky decomposition
 of the covariance `S`.
 """
 function diag_inv_prod(B::FFSDenseMatrix, S::Sigma)::Vector{Float64}
-   col_sq_norm(S.lowerinv * B.mat)
+   col_sq_norm(S.lowerinv * B)
 end
 
 
@@ -98,18 +95,11 @@ For each column b_i of B, computes ``sum_i weights[i] S^{-1} b_i bt_i' S^{-1}``,
 which is the same as S^{-1} B diag(weights) B' S^{-1}.
 """
 function weighted_grad_helper_B(B::FFSMatrix, S::Sigma, weights::Vector{Float64})
-    left = S.lowerinv' * (S.lowerinv * B.mat)
+    left = S.lowerinv' * (S.lowerinv * B)
     (weights' .* left ) * left'
 end
 
 
-"""
-For each row v_i of L, computes ``sum_i weights[i] v_i' v``
-which is the same as ``L' diag(weights) L``.
-"""
-function weighted_grad_helper_L(L::FFSMatrix, weights::Vector{Float64})
-    (weights' .* L.mat') * L.mat
-end
 
 #############################
 # Helper functions
@@ -198,7 +188,7 @@ function ffs_gradient(params::FFSParams,
     weightsL ./= params.c
     weightsB = exp.((b_diag .- b_max) .* tb)
     weightsB ./= sum(weightsB)
-    -weighted_grad_helper_B(params.B, S, weightsB) + weighted_grad_helper_L(params.L, weightsL)
+    -weighted_grad_helper_B(params.B, S, weightsB) + weightedLTL(params.L, weightsL)
 end
 
 function hess_times_vec(thevec::Vector{Float64},
@@ -365,6 +355,7 @@ end
 export ffs_optimize,
        FFSMatrix,
        FFSDenseMatrix,
+       FFSId,
        privacy_cost,
        l2error_vector,
        ffs_overrun,
