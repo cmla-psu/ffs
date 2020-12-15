@@ -1,7 +1,6 @@
 module Fitness
 using LinearAlgebra
 
-
 const START = 1 #starting index
 const ROW = 1 # first dimension is ROW
 const COL = 2 # second dimension is COL
@@ -47,6 +46,8 @@ Keeps track of the covariance matrix and its cholesky decomposition.
 struct Sigma
    cov::CovType # the covariance matrix
    lower::Matrix{Float64} # the lower triangular matrix from its cholesky decomposition
+   lowerinv::Matrix{Float64}
+   Sigma(c, l) = new(c, l, l \ I)
 end
 
 
@@ -59,52 +60,52 @@ end
 # decomposition, create a subtype
 # of FFSMatrix and implement
 # a fast version of these functions
-#
+# but usually it is faster to write your
+# matrix multipliation methods for LX and XB
+# where L and B are the representation and basis matrices
 ######################################
 
 """
-Returns the diagonal of ``A S A'`` divided pointwise by `c`.
-For dense matrices, we compute the squared norm of each row of ``A * lower``,
+Returns the diagonal of ``L S L'`` divided pointwise by `c`.
+For dense matrices, we compute the squared norm of each row of ``L * lower``,
 where `lower` is the lower triangular matrix of the cholesky decomposition
-of the covariance `S`. This should be specialized to other matrix representations
-for speed.
+of the covariance `S`.
 """
-function diag_prod(A::FFSDenseMatrix,
+function diag_prod(L::FFSDenseMatrix,
                    S::Sigma,
                    c::Union{Float64, Vector{Float64}})::Vector{Float64}
 
-    result = row_sq_norm(A.mat * S.lower)
+    result = row_sq_norm(L.mat * S.lower)
     result ./= c
     result
 end
 
 
 """
-Returns the diagonal of ``A' S^{-1} A``.
+Returns the diagonal of ``B' S^{-1} B``.
 For dense matrices, we compute the squared norm of each column of ``x``, where ``x`` is obtained
-by solving ``lower x = A`` through forward substitution,
+by solving ``lower x = B``,
 where ``lower`` is the lower triangular matrix of the cholesky decomposition
-of the covariance `S`. This should be specialized to other matrix representations
-for speed.
+of the covariance `S`.
 """
-function diag_inv_prod(A::FFSDenseMatrix, S::Sigma)::Vector{Float64}
-   col_sq_norm(S.lower \ A.mat)
+function diag_inv_prod(B::FFSDenseMatrix, S::Sigma)::Vector{Float64}
+   col_sq_norm(S.lowerinv * B.mat)
 end
 
 
 """
 For each column b_i of B, computes ``sum_i weights[i] S^{-1} b_i bt_i' S^{-1}``,
-which is the same as S^{-1} B diag(weights) B' S^{-1}. Specialize the method
-for faster operations
+which is the same as S^{-1} B diag(weights) B' S^{-1}.
 """
 function weighted_grad_helper_B(B::FFSMatrix, S::Sigma, weights::Vector{Float64})
-    left = (S.lower' \ (S.lower \ B.mat))
+    left = S.lowerinv' * (S.lowerinv * B.mat)
     (weights' .* left ) * left'
 end
 
+
 """
 For each row v_i of L, computes ``sum_i weights[i] v_i' v``
-which is the same as ``L' diag(weights) L``. Specialize the method for faster operations
+which is the same as ``L' diag(weights) L``.
 """
 function weighted_grad_helper_L(L::FFSMatrix, weights::Vector{Float64})
     (weights' .* L.mat') * L.mat
