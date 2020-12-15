@@ -1,6 +1,6 @@
 module Fitness
 using LinearAlgebra
-include("FFSMatrix.jl")
+
 
 const START = 1 #starting index
 const ROW = 1 # first dimension is ROW
@@ -47,7 +47,38 @@ struct Sigma
 end
 
 
+########################################
+# Subtypes of FFSMatrix and
+# overloaded multiplication operations
+# and overloaded weightedLTL
+########################################
+"""
+The default structure for a dense matrix
+"""
+struct FFSDenseMatrix <: FFSMatrix
+   mat::Matrix{Float64}
+end
 
+Base.:*(M::FFSDenseMatrix, A::Matrix{Float64}) = M.mat * A
+Base.:*(A::Matrix{Float64}, M::FFSDenseMatrix) = A * M.mat
+"""
+For each row v_i of L, computes ``sum_i weights[i] v_i' v``
+which is the same as ``L' diag(weights) L``.
+"""
+weightedLTL(L::FFSDenseMatrix, weights::Vector{Float64}) = (weights' .* L.mat') * L.mat
+
+#####################################
+
+# Identity matrix for FFS. The identity matrix is a singleton called FFSId
+abstract type FFSId <: FFSMatrix end
+Base.:*(M::Type{FFSId}, A::Matrix{Float64}) = M.mat * A
+Base.:*(A::Matrix{Float64}, M::Type{FFSId}) = A * M.mat
+weightedLTL(L::Type{FFSId}, weights::Vector{Float64}) = diagm(weights)
+#TODO test
+#TODO prefix
+#TODO marginals
+#TODO range queries
+#TODO unions
 
 ######################################
 # Helper methods with
@@ -139,7 +170,7 @@ symmetric.
 """
 function symmetrize(S::Matrix{Float64})::Matrix{Float64}
    # makes sure the matrix S is symmetric
-   (S' .+ S) ./ 2
+   (S' + S) / 2
 end
 
 
@@ -172,31 +203,47 @@ end
 #####################################
 # Gradient and Hessian Calculations
 #####################################
+
+struct GradInfo
+   gradient::Matrix{Float64}
+   gradB::Matrix{Float64} #gradient of the privacy part
+   gradL::Matrix{Float64} #gradient of the utility part
+   weightsL::Vector{Float64} #exponential weights in the utility gradient
+   GradInfo(;gradB, gradL, weightsL) = new(gradB+gradL, gradB, gradL, weightsL)
+end
+
 """
 Computes the gradient of the objective function
 """
 function ffs_gradient(params::FFSParams,
                   S::Sigma;
                   tb::Float64,
-                  tl::Float64)::Matrix{Float64}
+                  tl::Float64)::GradInfo
     l_diag = diag_prod(params.L, S, params.c)
     l_max = maximum(l_diag)
     b_diag = diag_inv_prod(params.B, S)
     b_max = maximum(b_diag)
-    weightsL = exp.((l_diag .- l_max) .* tl)
-    weightsL ./= sum(weightsL)
+    weightsL = exp.((l_diag .- l_max) * tl)
+    weightsL /= sum(weightsL)
     weightsL ./= params.c
-    weightsB = exp.((b_diag .- b_max) .* tb)
-    weightsB ./= sum(weightsB)
-    -weighted_grad_helper_B(params.B, S, weightsB) + weightedLTL(params.L, weightsL)
+    weightsB = exp.((b_diag .- b_max) * tb)
+    weightsB /= sum(weightsB)
+    gradB = -weighted_grad_helper_B(params.B, S, weightsB)
+    gradL = weightedLTL(params.L, weightsL)
+    GradInfo(gradB=gradB, gradL=gradL, weightsL=weightsL)
 end
 
-function hess_times_vec(thevec::Vector{Float64},
+function hess_times_direction(ginfo::GradInfo,
+                        direction::Matrix{Float64},
                         params::FFSParams,
                         S::Sigma;
                         tb::Float64,
-                        tl::Float64)::Float64
-   #TODO
+                        tl::Float64)::Matrix{Float64}
+
+    new_weights_L = diag_prod(params.L, direction, params.c)
+    hess_L_part1 = weightedLTL(params.L, new_weights_L)
+    hess_prod_L = hess_L_part1 - dot(new_weights_L, ginfo.weightsL) * ginfo.gradient
+    hess_prod_L
 end
 
 
@@ -245,7 +292,7 @@ function line_search(params::FFSParams,
    result = S
    while !done
       fprev = fcurr
-      candidate .= direction .* alpha .+ S.cov
+      candidate = direction * alpha + S.cov
       (status, lower) = check_pos_def(candidate)
       if status
           fcurr = objective(params, Sigma(candidate, lower), tb=tb, tl=tl)
