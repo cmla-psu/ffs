@@ -65,7 +65,14 @@ Base.:*(A::Matrix{Float64}, M::FFSDenseMatrix) = A * M.mat
 For each row v_i of L, computes ``sum_i weights[i] v_i' v``
 which is the same as ``L' diag(weights) L``.
 """
-weightedLTL(L::FFSDenseMatrix, weights::Vector{Float64}) = (weights' .* L.mat') * L.mat
+weightedLTL(L::FFSDenseMatrix, weights::Vector{Float64})::Matrix{Float64} = (weights' .* L.mat') * L.mat
+
+function diag_prod(L::FFSDenseMatrix,
+                   S::Matrix{Float64},
+                   c::Union{Float64, Vector{Float64}})::Vector{Float64}
+    result = sum((L.mat * S) .* L.mat, dims=COL) ./ c
+    reshape(result, :) # from m x 1 matrix to col vecctor
+end
 
 #####################################
 
@@ -73,7 +80,14 @@ weightedLTL(L::FFSDenseMatrix, weights::Vector{Float64}) = (weights' .* L.mat') 
 abstract type FFSId <: FFSMatrix end
 Base.:*(M::Type{FFSId}, A::Matrix{Float64}) = M.mat * A
 Base.:*(A::Matrix{Float64}, M::Type{FFSId}) = A * M.mat
-weightedLTL(L::Type{FFSId}, weights::Vector{Float64}) = diagm(weights)
+weightedLTL(L::Type{FFSId}, weights::Vector{Float64})::Matrix{Float64} = diagm(weights)
+function diag_prod(L::Type{FFSId},
+                   S::Matrix{Float64},
+                   c::Union{Float64, Vector{Float64}})::Vector{Float64}
+    diag(S) ./ c
+end
+
+
 #TODO test
 #TODO prefix
 #TODO marginals
@@ -108,6 +122,14 @@ function diag_prod(L::FFSDenseMatrix,
     result
 end
 
+"""
+Specialized versions of diag_prod when cholesky decomposition is not available
+"""
+function diag_prod(L::FFSMatrix,
+                   S::Matrix{Float64},
+                   c::Union{Float64, Vector{Float64}})::Vector{Float64}
+    diag(L*(L * S)') ./ c
+end
 
 """
 Returns the diagonal of ``B' S^{-1} B``.
@@ -240,7 +262,7 @@ function hess_times_direction(ginfo::GradInfo,
                         tb::Float64,
                         tl::Float64)::Matrix{Float64}
 
-    new_weights_L = diag_prod(params.L, direction, params.c)
+    new_weights_L = diag_prod(params.L, direction, params.c) * tl
     hess_L_part1 = weightedLTL(params.L, new_weights_L)
     hess_prod_L = hess_L_part1 - dot(new_weights_L, ginfo.weightsL) * ginfo.gradient
     hess_prod_L

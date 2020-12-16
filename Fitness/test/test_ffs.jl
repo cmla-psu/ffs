@@ -16,7 +16,21 @@ const COL=1
     c = [1.0, 1.5, 2.0, 2.5, 3.0]
 
     @test Fitness.diag_prod(L, S, c) ≈ LinearAlgebra.diag(L.mat * S.cov * L.mat')./c atol=tolerance
+    @test Fitness.diag_prod(L, cov, c) ≈ Fitness.diag_prod(L, S, c)
     @test Fitness.diag_inv_prod(BT, S) ≈ LinearAlgebra.diag(B' * inv(S.cov) * B) atol=tolerance
+
+    anotherL = FFSDenseMatrix(rand(5,4))
+    tmp = rand(4,4)
+    anotherCov = tmp' * tmp + 0.01 * LinearAlgebra.I
+    anotherC = rand(5)
+    (_, anotherLower) = Fitness.check_pos_def(anotherCov)
+    anotherS = Fitness.Sigma(anotherCov, anotherLower)
+    anotherB = rand(4,4)
+    anotherBT = FFSDenseMatrix(anotherB)
+    @test Fitness.diag_prod(anotherL, anotherS, anotherC) ≈ LinearAlgebra.diag(anotherL.mat * anotherS.cov * anotherL.mat')./anotherC atol=tolerance
+    @test Fitness.diag_prod(anotherL, anotherCov, anotherC) ≈ Fitness.diag_prod(anotherL, anotherS, anotherC)
+    @test Fitness.diag_inv_prod(anotherBT, anotherS) ≈ LinearAlgebra.diag(anotherB' * inv(anotherS.cov) * anotherB) atol=tolerance
+
 
     B2 = rand(4,5)
     tmp2 = rand(4,4)
