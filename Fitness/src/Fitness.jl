@@ -262,18 +262,9 @@ function hess_times_direction(ginfo::GradInfo,
                         tb::Float64,
                         tl::Float64)::Matrix{Float64}
 
-    new_weights_L = diag_prod(params.L, direction, params.c) * tl
     new_weights_L = diag_prod(params.L, direction, params.c) .* ginfo.weightsL * tl
     hess_L_part1 = weightedLTL(params.L, new_weights_L)
-    hess_prod_L = hess_L_part1 - dot(new_weights_L, ginfo.weightsL) * ginfo.gradL
     hess_prod_L = hess_L_part1 - sum(new_weights_L) * ginfo.gradL
-    println("gradient")
-    display(ginfo.gradL)
-    println("\n weightsL")
-    display(ginfo.weightsL)
-    println("\n newweights")
-    display(new_weights_L)
-    println("")
     hess_prod_L
 end
 
