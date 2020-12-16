@@ -34,6 +34,9 @@ import Zygote
     # compute cov * Hessian * direction (i.e. dot product between cov and (Hessian product with direction))
     cov_hess_dir = Zygote.hessian(((s,),) -> directed(s), [0.])[1]
     hprod = Fitness.hess_times_direction(g_ffs, direction, params, S0, tb=t1, tl=t2)
+    println()
+    display(hprod)
+    println()
     @test cov_hess_dir ≈ dot(cov, hprod)
 
     ###########
