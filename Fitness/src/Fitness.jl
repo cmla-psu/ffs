@@ -237,8 +237,8 @@ struct GradInfo
    gradient::Matrix{Float64}
    gradB::Matrix{Float64} #gradient of the privacy part
    gradL::Matrix{Float64} #gradient of the utility part
-   weightsL::Vector{Float64} #exponential weights in the utility gradient
-   weightsB::Vector{Float64} #exponential weights in the privacy gradient
+   weightsB::Vector{Float64} #exponential weights in the utility gradient
+   weightsL::Vector{Float64} #exponential weights in the privacy gradient
    GradInfo(;gradB, gradL, weightsB, weightsL) = new(gradB+gradL, gradB, gradL, weightsB, weightsL)
 end
 
@@ -270,15 +270,15 @@ function hess_times_direction(ginfo::GradInfo,
                         tb::Float64,
                         tl::Float64)::Matrix{Float64}
 
-    new_weights_L = diag_prod(params.L, direction, params.c) .* ginfo.weightsL * tl #vector of derivatives of each exponential term
-    hess_L_part1 = weightedLTL(params.L, new_weights_L)
+    new_weights_L = diag_prod(params.L, direction, 1.0) .* ginfo.weightsL * tl #vector of derivatives of each exponential term
+    hess_L_part1 = weightedLTL(params.L, new_weights_L ./ params.c)
     hess_L_part2 = -sum(new_weights_L) * ginfo.gradL
     hess_prod_L = hess_L_part1 + hess_L_part2
     new_weights_B = weighted_hess_helper_B(params.B, S, direction) .* ginfo.weightsB * (-tb)
     hess_B_part1 = -weighted_grad_helper_B(params.B, S, new_weights_B)
     hess_B_part2 = -sum(new_weights_B) * ginfo.gradB
-    hess_B_part3 = -(ginfo.gradB * direction * S.lowerinv' * S.lowerinv)
-    hess_prod_B = hess_B_part1 + hess_B_part2 + hess_B_part3 + hess_B_part3'
+    hess_B_part3half = -(ginfo.gradB * direction * S.lowerinv' * S.lowerinv)
+    hess_prod_B = hess_B_part1 + hess_B_part2 + hess_B_part3half + hess_B_part3half'
     println("\n gradL")
     display(ginfo.gradL)
     println("\n hess_L_part 1")
@@ -287,16 +287,12 @@ function hess_times_direction(ginfo::GradInfo,
     display(hess_L_part2)
     println("\n gradB")
     display(ginfo.gradB)
-    println("\n weightsB")
-    display(ginfo.weightsB)
-    println("\n newweights")
-    display(new_weights_B)
     println("\n hess_B_part 1")
     display(hess_B_part1)
     println("\n hess_B_part_2")
     display(hess_B_part2)
     println("\n hess_B_part_3")
-    display(hess_B_part3)
+    display(hess_B_part3half + hess_B_part3half')
     println("\n")
     hess_prod_L + hess_prod_B
 

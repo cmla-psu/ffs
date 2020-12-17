@@ -6,11 +6,13 @@ import Zygote
 
 @testset "gradient and hessian" begin
     tolerance = 1e-7
-    function obj(cov)
-        log(sum(exp.(diag(Brand' * inv(cov) * Brand) * t1)))/t1 +
-        log(sum(exp.(diag(Lrand * cov * Lrand') ./ c * t2)))/t2
-    end
-    function directed(s)
+    fd_tolerance = 1e-4 #tolerance for finite differences
+    fd_step = 0.00001 # step size for finite differences
+    objB(cov) = log(sum(exp.(diag(Brand' * inv(cov) * Brand) * t1)))/t1
+    objL(cov) = log(sum(exp.(diag(Lrand * cov * Lrand') ./ c * t2)))/t2
+    obj(cov) = objB(cov) + objL(cov) #objective function
+
+    function directed(s) # 2nd derivatives with respect to s evaluated at s=0 should return direction' hessian direction
         obj(cov + s * direction)
     end
     function partsB(x,y,z) # used to test directional derivative of gradient
@@ -30,10 +32,50 @@ import Zygote
         for i in 1:size(Lrand, 1) #rows
             expterm = exp(t2/c[i] * Lrand[i,:]' * (cov + x * direction) * Lrand[i,:])
             denom += exp(t2/c[i] * Lrand[i,:]' * (cov + y * direction) * Lrand[i,:])
-            deriv -= expterm *  Lrand[i,:] * Lrand[i,:]'/c[i]
+            deriv += expterm *  Lrand[i,:] * Lrand[i,:]'/c[i]
         end
         deriv/denom
     end
+    function print_debug(message)
+        println("\n ##################",message,"##############")
+        step = fd_step
+        println("\n gradient of L")
+        display(partsL(0., 0.))
+        println("\n from Zygote")
+        display(Zygote.gradient(objL, cov)[1])
+        println("\n estimated L part 1")
+        display((partsL(step, 0.) - partsL(0., 0.)) / step)
+        println("\n estimated L part 2")
+        display((partsL(0., step) - partsL(0., 0.)) / step)
+        println("\n gradient of B")
+        display(partsB(0., 0., 0.))
+        println("\n from Zygote")
+        display(Zygote.gradient(objB, cov)[1])
+        println("\n estimated B part 1")
+        display((partsB(step, 0., 0.) - partsB(0., 0., 0.)) / step)
+        println("\n estimated B part 2")
+        display((partsB(0., step, 0.) - partsB(0., 0., 0.)) / step)
+        println("\n estimated B part 3")
+        display((partsB(0., 0., step) - partsB(0., 0., 0.)) / step)
+        println()
+        cov_hess_dir = Zygote.hessian(((s,),) -> directed(s), [0.])[1] # zygote hessian not always reliable for this problem
+        println("dir' Hess dir Estimate from zygote: ",cov_hess_dir)
+        println("dir' Hess dir Finite differences: ", (directed(2*step) - 2*directed(step) + directed(0.))/step^2)
+    end
+    function fd_hess_and_prod(step)
+        base_l = partsL(0., 0.)
+        base_b = partsB(0., 0., 0.)
+        fd_prod = (directed(2*step) - 2*directed(step) + directed(0.))/step^2
+        fd_hess1 = (partsL(step, 0.) -base_l) / step +
+                   (partsL(0., step) - base_l) / step +
+                   (partsB(step, 0., 0.) - base_b) / step +
+                   (partsB(0., step, 0.) - base_b) / step +
+                   (partsB(0., 0., step) - base_b) / step
+        fd_hess2 = (partsL(step, step) - base_l) / step +
+                   (partsB(step, step, step) - base_b) / step
+        (fd_prod, fd_hess1, fd_hess2)
+    end
+
     c = [1., 1.]
     cov = [1. 0; 0 1]
     t1 = 1.
@@ -50,28 +92,18 @@ import Zygote
     g_ffs = Fitness.ffs_gradient(params, S0, tb=t1, tl=t2)
     @test g ≈ g_ffs.gradient atol=tolerance
 
-    direction = [0. 0.; 0. 0.] + I
-    # compute cov * Hessian * direction (i.e. dot product between cov and (Hessian product with direction))
-    cov_hess_dir = Zygote.hessian(((s,),) -> directed(s), [0.])[1]
-    hprod = Fitness.hess_times_direction(g_ffs, direction, params, S0, tb=t1, tl=t2)
-    @test cov_hess_dir ≈ dot(cov, hprod) atol=tolerance
-    step = 0.00001
-    println("\n gradient of L")
-    display(partsL(0., 0.))
-    println("\n estimated L part 1")
-    display((partsL(step, 0.) - partsL(0., 0.)) / step)
-    println("\n estimated L part 2")
-    display((partsL(0., step) - partsL(0., 0.)) / step)
+    direction = [1. 1.; 1. 1.] + I
 
-    println("\n gradient of B")
-    display(partsB(0., 0., 0.))
-    println("\n estimated B part 1")
-    display((partsB(step, 0., 0.) - partsB(0., 0., 0.)) / step)
-    println("\n estimated B part 2")
-    display((partsB(0., step, 0.) - partsB(0., 0., 0.)) / step)
-    println("\n estimated B part 3")
-    display((partsB(0., 0., step) - partsB(0., 0., 0.)) / step)
-    println()
+    # compute direction' * Hessian * direction (i.e. dot product between cov and (Hessian product with direction))
+    #cov_hess_dir = Zygote.hessian(((s,),) -> directed(s), [0.])[1] # zygote diverges from finite difference test
+    #@test cov_hess_dir ≈ dot(direction, hprod) atol=tolerance
+
+    hprod = Fitness.hess_times_direction(g_ffs, direction, params, S0, tb=t1, tl=t2)
+    (fd_prod, fd_hess1, fd_hess2) = fd_hess_and_prod(fd_step)
+    print_debug("test1")
+    @test fd_prod ≈ dot(direction, hprod) atol=fd_tolerance
+    @test fd_hess1 ≈ hprod atol=fd_tolerance
+    @test fd_hess2 ≈ hprod atol=fd_tolerance
 
     ###########
     # Second Gradient/Hessian combo
@@ -99,17 +131,22 @@ import Zygote
 
     direction = rand(d2, d2)
     direction = (direction + direction')/2 #symmetric direction
-    # compute cov * Hessian * direction (i.e. dot product between cov and (Hessian product with direction))
-    cov_hess_dir = Zygote.hessian(((s,),) -> directed(s), [0.])[1]
+    # compute direction' * Hessian * direction (i.e. dot product between cov and (Hessian product with direction))
+    #cov_hess_dir = Zygote.hessian(((s,),) -> directed(s), [0.])[1] #zygote unreliable for this computation
+    #@test cov_hess_dir ≈ dot(direction, hprod) atol=tolerance
     hprod = Fitness.hess_times_direction(g_ffs, direction, params, S1, tb=t1, tl=t2)
-    @test cov_hess_dir ≈ dot(cov, hprod) atol=tolerance
+    (fd_prod, fd_hess1, fd_hess2) = fd_hess_and_prod(fd_step)
+    print_debug("test2")
+    @test fd_prod ≈ dot(direction, hprod) atol=fd_tolerance
+    @test fd_hess1 ≈ hprod atol=fd_tolerance
+    @test fd_hess2 ≈ hprod atol=fd_tolerance
 
     ##########################
     # Third gradient Hessian test
     #########################
 
     tmp = rand(d2,d2)
-    cov = tmp' * tmp + 0.01 * I
+    cov = tmp' * tmp + 0.1 * I
     c = ones(d1)
     (_, lower2) = Fitness.check_pos_def(cov)
     S2 = Fitness.Sigma(cov, lower2)
@@ -121,9 +158,14 @@ import Zygote
 
     direction = rand(d2, d2)
     direction = (direction + direction')/2 #symmetric direction
-    # compute cov * Hessian * direction (i.e. dot product between cov and (Hessian product with direction))
-    cov_hess_dir = Zygote.hessian(((s,),) -> directed(s), [0.])[1]
+    # compute direction * Hessian * direction (i.e. dot product between cov and (Hessian product with direction))
+    #cov_hess_dir = Zygote.hessian(((s,),) -> directed(s), [0.])[1] #zygote result unreliable
+    #@test cov_hess_dir ≈ dot(direction, hprod) atol=tolerance
     hprod = Fitness.hess_times_direction(g_ffs, direction, params, S2, tb=t1, tl=t2)
-    @test cov_hess_dir ≈ dot(cov, hprod) atol=tolerance
+    (fd_prod, fd_hess1, fd_hess2) = fd_hess_and_prod(fd_step)
+    print_debug("test3")
+    @test fd_prod ≈ dot(direction, hprod) atol=fd_tolerance
+    @test fd_hess1 ≈ hprod atol=fd_tolerance
+    @test fd_hess2 ≈ hprod atol=fd_tolerance
 
 end
