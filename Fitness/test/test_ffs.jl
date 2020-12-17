@@ -99,7 +99,29 @@ end
 
 
 @testset "optimization" begin
-   # TODO test objective function
+    tolerance = 1e-7
+    objB(Brand, cov, t1) = log(sum(exp.(LinearAlgebra.diag(Brand' * inv(cov) * Brand) * t1)))/t1
+    objL(Lrand, c, cov, t2) = log(sum(exp.(LinearAlgebra.diag(Lrand * cov * Lrand') ./ c * t2)))/t2
+    obj(Brand, Lrand, c, cov, t1, t2) = objB(Brand, cov, t1) + objL(Lrand, c, cov, t2) #objective function
+
+    d1 = 8
+    d2 = 4
+    d3 = 5
+    Br = rand(d2,d3) # B
+    B = FFSDenseMatrix(Br)
+    covmat = zeros(d2,d2) + LinearAlgebra.I
+    Lr = rand(d1,d2)
+    L = FFSDenseMatrix(Lr)
+    cvec = collect(1.0:d1)
+    tb = 2.1
+    tl = 3.3
+    (_, lower) = Fitness.check_pos_def(covmat)
+    S = Fitness.Sigma(covmat, lower)
+    params = Fitness.FFSParams(B, L, cvec)
+    from_code = Fitness.objective(params, S, tb=tb, tl=tl)
+    from_test = obj(Br, Lr, cvec, covmat, tb, tl)
+    @test from_code ≈ from_test atol=tolerance
+
 end
 
 @testset "problem conversion" begin

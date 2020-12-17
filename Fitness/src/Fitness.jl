@@ -279,21 +279,6 @@ function hess_times_direction(ginfo::GradInfo,
     hess_B_part2 = -sum(new_weights_B) * ginfo.gradB
     hess_B_part3half = -(ginfo.gradB * direction * S.lowerinv' * S.lowerinv)
     hess_prod_B = hess_B_part1 + hess_B_part2 + hess_B_part3half + hess_B_part3half'
-    println("\n gradL")
-    display(ginfo.gradL)
-    println("\n hess_L_part 1")
-    display(hess_L_part1)
-    println("\n hess_L_part_2")
-    display(hess_L_part2)
-    println("\n gradB")
-    display(ginfo.gradB)
-    println("\n hess_B_part 1")
-    display(hess_B_part1)
-    println("\n hess_B_part_2")
-    display(hess_B_part2)
-    println("\n hess_B_part_3")
-    display(hess_B_part3half + hess_B_part3half')
-    println("\n")
     hess_prod_L + hess_prod_B
 
 end
@@ -319,7 +304,7 @@ function objective(params::FFSParams, S::Sigma; tb::Float64, tl::Float64)::Float
 
    b_diag = diag_inv_prod(params.B, S) # diagonal of B' * S * B
    l_diag = diag_prod(params.L, S, params.c) # diagonal of L * S * LT
-   softmax(b_diag, tb) + softmax(l_diag, tl) #TODO
+   softmax(b_diag, tb) + softmax(l_diag, tl) 
 end
 
 
