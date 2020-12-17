@@ -46,14 +46,22 @@ const COL=1
     for i in 1:5
         helperB += invcov2 * B2[:,i] * B2[:,i]' * invcov2 * weightB[i]
     end
-    @test Fitness.weighted_grad_helper_B(FFSDenseMatrix(B2), S2, weightB) ≈ helperB
+    @test Fitness.weighted_grad_helper_B(FFSDenseMatrix(B2), S2, weightB) ≈ helperB atol=tolerance
 
     helperL = zeros(4,4)
     for i in 1:8
         helperL += L2[i,:] * L2[i,:]' * weightL[i]
     end
 
-    @test Fitness.weightedLTL(FFSDenseMatrix(L2), weightL) ≈ helperL
+    @test Fitness.weightedLTL(FFSDenseMatrix(L2), weightL) ≈ helperL atol=tolerance
+
+    direction = rand(4,4)
+    direction = direction + direction'
+    hess_helper_b = zeros(5)
+    for i in 1:5
+        hess_helper_b[i] = LinearAlgebra.dot((invcov2 * B2[:, i] * B2[:, i]' * invcov2), direction)
+    end
+    @test Fitness.weighted_hess_helper_B(FFSDenseMatrix(B2), S2, direction) ≈ hess_helper_b atol=tolerance
 end
 
 @testset "test_helper_functions" begin

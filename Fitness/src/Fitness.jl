@@ -144,15 +144,22 @@ end
 
 
 """
-For each column b_i of B, computes ``sum_i weights[i] S^{-1} b_i bt_i' S^{-1}``,
+Computes ``sum_i weights[i] S^{-1} b_i b_i' S^{-1}``,
 which is the same as S^{-1} B diag(weights) B' S^{-1}.
 """
-function weighted_grad_helper_B(B::FFSMatrix, S::Sigma, weights::Vector{Float64})
+function weighted_grad_helper_B(B::FFSMatrix, S::Sigma, weights::Vector{Float64})::Matrix{Float64}
     left = S.lowerinv' * (S.lowerinv * B)
     (weights' .* left ) * left'
 end
 
-
+"""
+For each column b_i of B, computes the inner product <S^{-1} b_i b_i' S^{-1},  C>
+for a symmetric matrix C. This is equal to the diagonals of (S^{-1} B)' C (S^{-1} B)
+"""
+function weighted_hess_helper_B(B::FFSMatrix, S::Sigma, C::Matrix{Float64})::Vector{Float64}
+    left = S.lowerinv' * (S.lowerinv * B) # S^{-1}B
+    reshape(sum(left .* (C * left), dims=1), :)
+end
 
 #############################
 # Helper functions
@@ -231,7 +238,8 @@ struct GradInfo
    gradB::Matrix{Float64} #gradient of the privacy part
    gradL::Matrix{Float64} #gradient of the utility part
    weightsL::Vector{Float64} #exponential weights in the utility gradient
-   GradInfo(;gradB, gradL, weightsL) = new(gradB+gradL, gradB, gradL, weightsL)
+   weightsB::Vector{Float64} #exponential weights in the privacy gradient
+   GradInfo(;gradB, gradL, weightsB, weightsL) = new(gradB+gradL, gradB, gradL, weightsB, weightsL)
 end
 
 """
@@ -252,7 +260,7 @@ function ffs_gradient(params::FFSParams,
     weightsB /= sum(weightsB)
     gradB = -weighted_grad_helper_B(params.B, S, weightsB)
     gradL = weightedLTL(params.L, weightsL)
-    GradInfo(gradB=gradB, gradL=gradL, weightsL=weightsL)
+    GradInfo(gradB=gradB, gradL=gradL, weightsB=weightsB, weightsL=weightsL)
 end
 
 function hess_times_direction(ginfo::GradInfo,
@@ -262,10 +270,36 @@ function hess_times_direction(ginfo::GradInfo,
                         tb::Float64,
                         tl::Float64)::Matrix{Float64}
 
-    new_weights_L = diag_prod(params.L, direction, params.c) .* ginfo.weightsL * tl
+    new_weights_L = diag_prod(params.L, direction, params.c) .* ginfo.weightsL * tl #vector of derivatives of each exponential term
     hess_L_part1 = weightedLTL(params.L, new_weights_L)
-    hess_prod_L = hess_L_part1 - sum(new_weights_L) * ginfo.gradL
-    hess_prod_L
+    hess_L_part2 = -sum(new_weights_L) * ginfo.gradL
+    hess_prod_L = hess_L_part1 + hess_L_part2
+    new_weights_B = weighted_hess_helper_B(params.B, S, direction) .* ginfo.weightsB * (-tb)
+    hess_B_part1 = -weighted_grad_helper_B(params.B, S, new_weights_B)
+    hess_B_part2 = -sum(new_weights_B) * ginfo.gradB
+    hess_B_part3 = -(ginfo.gradB * direction * S.lowerinv' * S.lowerinv)
+    hess_prod_B = hess_B_part1 + hess_B_part2 + hess_B_part3 + hess_B_part3'
+    println("\n gradL")
+    display(ginfo.gradL)
+    println("\n hess_L_part 1")
+    display(hess_L_part1)
+    println("\n hess_L_part_2")
+    display(hess_L_part2)
+    println("\n gradB")
+    display(ginfo.gradB)
+    println("\n weightsB")
+    display(ginfo.weightsB)
+    println("\n newweights")
+    display(new_weights_B)
+    println("\n hess_B_part 1")
+    display(hess_B_part1)
+    println("\n hess_B_part_2")
+    display(hess_B_part2)
+    println("\n hess_B_part_3")
+    display(hess_B_part3)
+    println("\n")
+    hess_prod_L + hess_prod_B
+
 end
 
 

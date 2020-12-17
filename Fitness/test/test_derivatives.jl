@@ -11,8 +11,28 @@ import Zygote
         log(sum(exp.(diag(Lrand * cov * Lrand') ./ c * t2)))/t2
     end
     function directed(s)
-        newpoint = cov + s * direction
-        log(sum(exp.(diag(Lrand * newpoint * Lrand') ./ c * t2)))/t2
+        obj(cov + s * direction)
+    end
+    function partsB(x,y,z) # used to test directional derivative of gradient
+                         # of the privacy part,  separating out the 3 components of the chain rule
+        deriv = zeros(size(cov))
+        denom = 0.
+        for i in 1:size(Brand,2) #for each colum
+            expterm = exp(t1 * Brand[:,i]' * inv(cov + x * direction) * Brand[:, i])
+            denom += exp(t1 * Brand[:,i]' * inv(cov + y * direction) * Brand[:, i])
+            deriv -= expterm * inv(cov + z * direction) * Brand[:,i] * Brand[:,i]' * inv(cov + z * direction)'
+        end
+        deriv/denom
+    end
+    function partsL(x,y)
+        deriv = zeros(size(cov))
+        denom = 0.
+        for i in 1:size(Lrand, 1) #rows
+            expterm = exp(t2/c[i] * Lrand[i,:]' * (cov + x * direction) * Lrand[i,:])
+            denom += exp(t2/c[i] * Lrand[i,:]' * (cov + y * direction) * Lrand[i,:])
+            deriv -= expterm *  Lrand[i,:] * Lrand[i,:]'/c[i]
+        end
+        deriv/denom
     end
     c = [1., 1.]
     cov = [1. 0; 0 1]
@@ -34,8 +54,25 @@ import Zygote
     # compute cov * Hessian * direction (i.e. dot product between cov and (Hessian product with direction))
     cov_hess_dir = Zygote.hessian(((s,),) -> directed(s), [0.])[1]
     hprod = Fitness.hess_times_direction(g_ffs, direction, params, S0, tb=t1, tl=t2)
-    @test cov_hess_dir ≈ dot(cov, hprod)
-    return
+    @test cov_hess_dir ≈ dot(cov, hprod) atol=tolerance
+    step = 0.00001
+    println("\n gradient of L")
+    display(partsL(0., 0.))
+    println("\n estimated L part 1")
+    display((partsL(step, 0.) - partsL(0., 0.)) / step)
+    println("\n estimated L part 2")
+    display((partsL(0., step) - partsL(0., 0.)) / step)
+
+    println("\n gradient of B")
+    display(partsB(0., 0., 0.))
+    println("\n estimated B part 1")
+    display((partsB(step, 0., 0.) - partsB(0., 0., 0.)) / step)
+    println("\n estimated B part 2")
+    display((partsB(0., step, 0.) - partsB(0., 0., 0.)) / step)
+    println("\n estimated B part 3")
+    display((partsB(0., 0., step) - partsB(0., 0., 0.)) / step)
+    println()
+
     ###########
     # Second Gradient/Hessian combo
     ##########
@@ -56,14 +93,16 @@ import Zygote
 
     #g = ForwardDiff.gradient(obj, cov1)
     g = Zygote.gradient(obj, cov)[1]
-    g_ffs = Fitness.ffs_gradient(Fitness.FFSParams(B, L, c), S1, tb=t1, tl=t2)
-    #println()
-    #display(g)
-    #println()
-    #println()
-    #display(g_ffs.gradient)
-    #println()
+    params = Fitness.FFSParams(B, L, c)
+    g_ffs = Fitness.ffs_gradient(params, S1, tb=t1, tl=t2)
     @test g ≈ g_ffs.gradient atol=tolerance
+
+    direction = rand(d2, d2)
+    direction = (direction + direction')/2 #symmetric direction
+    # compute cov * Hessian * direction (i.e. dot product between cov and (Hessian product with direction))
+    cov_hess_dir = Zygote.hessian(((s,),) -> directed(s), [0.])[1]
+    hprod = Fitness.hess_times_direction(g_ffs, direction, params, S1, tb=t1, tl=t2)
+    @test cov_hess_dir ≈ dot(cov, hprod) atol=tolerance
 
     ##########################
     # Third gradient Hessian test
@@ -76,6 +115,15 @@ import Zygote
     S2 = Fitness.Sigma(cov, lower2)
     #g2 = ForwardDiff.gradient(obj, cov2)
     g2 = Zygote.gradient(obj, cov)[1]
-    g2_ffs = Fitness.ffs_gradient(Fitness.FFSParams(B, L, c), S2, tb=t1, tl=t2)
+    params = Fitness.FFSParams(B, L, c)
+    g2_ffs = Fitness.ffs_gradient(params, S2, tb=t1, tl=t2)
     @test g2 ≈ g2_ffs.gradient atol=tolerance
+
+    direction = rand(d2, d2)
+    direction = (direction + direction')/2 #symmetric direction
+    # compute cov * Hessian * direction (i.e. dot product between cov and (Hessian product with direction))
+    cov_hess_dir = Zygote.hessian(((s,),) -> directed(s), [0.])[1]
+    hprod = Fitness.hess_times_direction(g_ffs, direction, params, S2, tb=t1, tl=t2)
+    @test cov_hess_dir ≈ dot(cov, hprod) atol=tolerance
+
 end
