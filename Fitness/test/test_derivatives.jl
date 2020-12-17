@@ -6,15 +6,27 @@ import Zygote
 
 @testset "gradient and hessian" begin
     tolerance = 1e-7
-    fd_tolerance = 1e-4 #tolerance for finite differences
+    fd_tolerance = 1e-3 #tolerance for finite differences
     fd_step = 0.00001 # step size for finite differences
     objB(cov) = log(sum(exp.(diag(Brand' * inv(cov) * Brand) * t1)))/t1
     objL(cov) = log(sum(exp.(diag(Lrand * cov * Lrand') ./ c * t2)))/t2
     obj(cov) = objB(cov) + objL(cov) #objective function
+    function objBstable(cov)
+        elements = diag(Brand' * inv(cov) * Brand)
+        maxel = maximum(elements)
+        maxel + log(sum(exp.((elements .- maxel) * t1)))/t1
+    end
+    function objLstable(cov)
+        elements = diag(Lrand * cov * Lrand') ./ c
+        maxel = maximum(elements)
+        maxel + log(sum(exp.((elements .- maxel) * t2)))/t2
+    end
+    objstable(cov) = objBstable(cov) + objLstable(cov)
 
     function directed(s) # 2nd derivatives with respect to s evaluated at s=0 should return direction' hessian direction
         obj(cov + s * direction)
     end
+    directed_stable(s) = objstable(cov + s*direction)
     function partsB(x,y,z) # used to test directional derivative of gradient
                          # of the privacy part,  separating out the 3 components of the chain rule
         deriv = zeros(size(cov))
@@ -65,7 +77,7 @@ import Zygote
     function fd_hess_and_prod(step)
         base_l = partsL(0., 0.)
         base_b = partsB(0., 0., 0.)
-        fd_prod = (directed(2*step) - 2*directed(step) + directed(0.))/step^2
+        fd_prod = (directed_stable(2*step) - 2*directed_stable(step) + directed_stable(0.))/step^2
         fd_hess1 = (partsL(step, 0.) -base_l) / step +
                    (partsL(0., step) - base_l) / step +
                    (partsB(step, 0., 0.) - base_b) / step +
