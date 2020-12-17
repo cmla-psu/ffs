@@ -31,9 +31,18 @@ import Zygote
                          # of the privacy part,  separating out the 3 components of the chain rule
         deriv = zeros(size(cov))
         denom = 0.
+        pieces_x = zeros(size(Brand, 2))
+        pieces_y = zeros(size(Brand, 2))
+        for i in 1:size(Brand, 2)
+            pieces_x[i]=t1 * Brand[:,i]' * inv(cov + x * direction) * Brand[:, i]
+            pieces_y[i]=t1 * Brand[:,i]' * inv(cov + y * direction) * Brand[:, i]
+        end
+        max_x = maximum(pieces_x)
+        max_y = maximum(pieces_y)
+        themax = max(max_x, max_y)
         for i in 1:size(Brand,2) #for each colum
-            expterm = exp(t1 * Brand[:,i]' * inv(cov + x * direction) * Brand[:, i])
-            denom += exp(t1 * Brand[:,i]' * inv(cov + y * direction) * Brand[:, i])
+            expterm = exp(pieces_x[i]-themax)
+            denom += exp(pieces_y[i]-themax)
             deriv -= expterm * inv(cov + z * direction) * Brand[:,i] * Brand[:,i]' * inv(cov + z * direction)'
         end
         deriv/denom
@@ -41,9 +50,18 @@ import Zygote
     function partsL(x,y)
         deriv = zeros(size(cov))
         denom = 0.
+        pieces_x = zeros(size(Lrand, 1))
+        pieces_y = zeros(size(Lrand, 1))
+        for i in 1:size(Lrand, 1)
+            pieces_x[i] = t2/c[i] * Lrand[i,:]' * (cov + x * direction) * Lrand[i,:]
+            pieces_y[i] = t2/c[i] * Lrand[i,:]' * (cov + y * direction) * Lrand[i,:]
+        end
+        max_x = maximum(pieces_x)
+        max_y = maximum(pieces_y)
+        themax = max(max_x, max_y)
         for i in 1:size(Lrand, 1) #rows
-            expterm = exp(t2/c[i] * Lrand[i,:]' * (cov + x * direction) * Lrand[i,:])
-            denom += exp(t2/c[i] * Lrand[i,:]' * (cov + y * direction) * Lrand[i,:])
+            expterm = exp(pieces_x[i] - themax)
+            denom += exp(pieces_y[i] - themax)
             deriv += expterm *  Lrand[i,:] * Lrand[i,:]'/c[i]
         end
         deriv/denom
@@ -112,10 +130,10 @@ import Zygote
 
     hprod = Fitness.hess_times_direction(g_ffs, direction, params, S0, tb=t1, tl=t2)
     (fd_prod, fd_hess1, fd_hess2) = fd_hess_and_prod(fd_step)
-    print_debug("test1")
-    @test fd_prod ≈ dot(direction, hprod) atol=fd_tolerance
-    @test fd_hess1 ≈ hprod atol=fd_tolerance
-    @test fd_hess2 ≈ hprod atol=fd_tolerance
+    #print_debug("test1")
+    @test fd_prod ≈ dot(direction, hprod) rtol=fd_tolerance
+    @test fd_hess1 ≈ hprod rtol=fd_tolerance
+    @test fd_hess2 ≈ hprod rtol=fd_tolerance
 
     ###########
     # Second Gradient/Hessian combo
@@ -148,10 +166,10 @@ import Zygote
     #@test cov_hess_dir ≈ dot(direction, hprod) atol=tolerance
     hprod = Fitness.hess_times_direction(g_ffs, direction, params, S1, tb=t1, tl=t2)
     (fd_prod, fd_hess1, fd_hess2) = fd_hess_and_prod(fd_step)
-    print_debug("test2")
-    @test fd_prod ≈ dot(direction, hprod) atol=fd_tolerance
-    @test fd_hess1 ≈ hprod atol=fd_tolerance
-    @test fd_hess2 ≈ hprod atol=fd_tolerance
+    #print_debug("test2")
+    @test fd_prod ≈ dot(direction, hprod) rtol=fd_tolerance
+    @test fd_hess1 ≈ hprod rtol=fd_tolerance
+    @test fd_hess2 ≈ hprod rtol=fd_tolerance
 
     ##########################
     # Third gradient Hessian test
@@ -173,11 +191,11 @@ import Zygote
     # compute direction * Hessian * direction (i.e. dot product between cov and (Hessian product with direction))
     #cov_hess_dir = Zygote.hessian(((s,),) -> directed(s), [0.])[1] #zygote result unreliable
     #@test cov_hess_dir ≈ dot(direction, hprod) atol=tolerance
-    hprod = Fitness.hess_times_direction(g_ffs, direction, params, S2, tb=t1, tl=t2)
+    hprod = Fitness.hess_times_direction(g2_ffs, direction, params, S2, tb=t1, tl=t2)
     (fd_prod, fd_hess1, fd_hess2) = fd_hess_and_prod(fd_step)
-    print_debug("test3")
-    @test fd_prod ≈ dot(direction, hprod) atol=fd_tolerance
-    @test fd_hess1 ≈ hprod atol=fd_tolerance
-    @test fd_hess2 ≈ hprod atol=fd_tolerance
+    #print_debug("test3")
+    @test fd_prod ≈ dot(direction, hprod) rtol=fd_tolerance
+    @test fd_hess1 ≈ hprod rtol=fd_tolerance
+    @test fd_hess2 ≈ hprod rtol=fd_tolerance
 
 end
