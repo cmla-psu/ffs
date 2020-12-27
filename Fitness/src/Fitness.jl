@@ -335,7 +335,7 @@ function line_search(params::FFSParams,
    # dec is part of the sufficient decrease condition
    # beta is the candidate step size multiplier
 
-   alpha = 1.0 #TDOD test
+   alpha = 1.0
    fcurr = objective(params, S, tb=tb, tl=tl)
    done = false
    result = S
@@ -355,8 +355,31 @@ function line_search(params::FFSParams,
    result
 end
 
-function conjugate_gradient()
-      #TODO
+function conjugate_gradient(ginfo::GradInfo,
+                            params::FFSParams,
+                            S::Sigma,
+                            maxcg::Int;
+                            tb::Float64,
+                            tl::Float64,
+                            tol2::Float64=1e-10)::Matrix{Float64}
+    direction = zeros(size(ginfo.gradient))
+    r = -ginfo.gradient
+    p = copy(r)
+    rs_old = dot(r,r)
+    for i in 1:maxcg
+        Hp = hess_times_direction(ginfo, p, params, S, tb=tb, tl=tl)
+        a = rs_old / dot(p, Hp)
+        @. direction += a * p
+        @. r -= a * Hp
+        rs_new = dot(r,r)
+        if rs_new <= tol2
+            break
+        end
+        b = rs_new/rs_old
+        @. p = r + b * p
+        rs_old = rs_new
+    end
+    direction
 end
 
 function ffs_optimize()

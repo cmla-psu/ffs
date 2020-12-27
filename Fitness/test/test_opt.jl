@@ -37,3 +37,29 @@ using Fitness
     new_obj = Fitness.objective(params, new_sigma, tb=tb, tl=tl)
     @test new_obj < old_obj
 end
+
+@testset "conjugate gradient" begin
+    tolerance = 1e-7
+    relative_tolerance = 0.002
+    # L is d1 x d2
+    # B is d2 x d3
+    # Sigma is d2 x d2
+    d1 = 8
+    d2 = 4 #must be even
+    d3 = 5
+    Brand = rand(d2,d3) # B
+    B = FFSDenseMatrix(Brand)
+    tmp = rand(d2, d2)
+    cov = tmp' * tmp + 0.01 * I
+    Lrand = rand(d1,d2)
+    L = FFSDenseMatrix(Lrand)
+    c = collect(1.0:d1)
+    tb = 2.1
+    tl = 3.3
+    (_, lower) = Fitness.check_pos_def(cov)
+    S = Fitness.Sigma(cov, lower)
+    params = Fitness.FFSParams(B, L, c)
+    g_ffs = Fitness.ffs_gradient(params, S, tb=tb, tl=tl)
+    direction = Fitness.conjugate_gradient(g_ffs, params, S, d2, tb=tb, tl=tl)
+    @test Fitness.hess_times_direction(g_ffs, direction, params, S, tb=tb, tl=tl) ≈ -g_ffs.gradient atol=tolerance rtol=0.002
+end
