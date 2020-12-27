@@ -13,6 +13,36 @@ const COL = 2 # second dimension is COL
     msg::String
  end
 
+"""
+Tuning parameters for FFS optimization. Must create used named parameters.
+
+nttol: lower bound for dot(search direction, gradient)
+gaptol: limits size of softmax relatxion (number queries + domainsize)/t
+softmu: multiplier for softmax parameter t
+ls_dec: paramter for line search sufficient decrease condition
+ls_beta: step size multiplier in line search
+fudge: initialization parameter
+"""
+struct FFSTuningParams #TODO test
+    nttol::Float64
+    gaptol::Float64
+    softmu::Float64
+    ls_dec::Float64
+    ls_beta::Float64
+    cg_tol::Float64
+    cg_iter::Int64
+    fudge::Float64
+    FFSTuningParams(;nttol=0.01,
+                     gaptol=0.1,
+                     softmu=2.0,
+                     ls_dec=0.01,
+                     ls_beta=0.5,
+                     cg_tol=1e-10,
+                     cg_iter=5,
+                     fudge=0.99) = new(nttol,gaptol,softmu,ls_dec,ls_beta,
+                                      cg_tol, cg_iter,fudge)
+end
+
 
 """
 Base type for L and B matrices. Extend this for subtypes that have fast
@@ -33,9 +63,9 @@ CovType = Matrix{Float64}
 Keeps track of the problem settings, including the basis matrix,
 representation matrix, and target cost vector.
 """
-struct FFSParams
-   B::FFSMatrix # B
-   L::FFSMatrix # L
+struct FFSParams{TB<:FFSMatrix,TL<:FFSMatrix}
+   B::TB # B
+   L::TL # L
    c::Vector{Float64} # target variances
 end
 
@@ -302,7 +332,6 @@ function hess_times_direction(ginfo::GradInfo,
     hess_B_part3half = -(ginfo.gradB * direction * S.lowerinv' * S.lowerinv)
     hess_prod_B = hess_B_part1 + hess_B_part2 + hess_B_part3half + hess_B_part3half'
     hess_prod_L + hess_prod_B
-
 end
 
 
@@ -337,7 +366,7 @@ function line_search(params::FFSParams,
 		     tb::Float64,
 		     tl::Float64,
 		     dec::Float64 = 0.01,
-		     beta = 0.5
+		     beta::Float64 = 0.5
 		    )::Sigma
    # Performs a backtracking line search starting
    # from S in the specified direction
@@ -392,9 +421,28 @@ function conjugate_gradient(ginfo::GradInfo,
     direction
 end
 
-function ffs_optimize()
-    #TODO
+""" Perform Fitness for Use optimization """
+function ffs_optimize(;B::FFSMatrix,
+                       L::FFSMatrix,
+                       c=Vector{Float64},
+                       tune::FFSTuningParams=FFSTuningParams())::Matrix{Float64}
+    br, bc = size(B)
+    lr, lc = size(L)
+    numc = length(c)
+    if lc != br
+        throw(FFSException("Number of columns in L must equal number of rows in B"))
+    elseif lr != numc
+        throw(FFSException("Number of rows in L must equal number of fitness for use constraints (length of c)"))
+    end
+    params = FFSParams(B, L, c)
+    S = initialize(params, fudge=tune.fudge)
+    #TODO test
+    S.cov
 end
+
+
+
+
 
 """
 Creates an initial covarinace matrix. Q is either the identity or a guess
@@ -511,5 +559,6 @@ export ffs_optimize,
        ffs_overrun,
        enforce_pcost,
        enforce_ffs,
-       FFSException
+       FFSException,
+       FFSTuningParams
 end
