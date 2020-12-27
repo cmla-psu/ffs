@@ -263,6 +263,18 @@ function ffs_gradient(params::FFSParams,
     GradInfo(gradB=gradB, gradL=gradL, weightsB=weightsB, weightsL=weightsL)
 end
 
+
+""" Computes directly the product of the Hessian times the direction
+Since our variable of interest is a matrix, this is equivalent to
+flattening the variable, taking the Hessian, multipliying by the
+flattened direction, and reshaping the result.
+
+The variable ginfo contains the gradient along with some intermediate
+gradient calculations that can be re-used. The algorithm in this function
+is based on the idea that if f is an objective function g is its gradient,
+h is its hessian, the h(x) * direction = d g(x+t*direction)/dt evaluated at
+t=0.
+"""
 function hess_times_direction(ginfo::GradInfo,
                         direction::Matrix{Float64},
                         params::FFSParams,
@@ -304,7 +316,7 @@ function objective(params::FFSParams, S::Sigma; tb::Float64, tl::Float64)::Float
 
    b_diag = diag_inv_prod(params.B, S) # diagonal of B' * S * B
    l_diag = diag_prod(params.L, S, params.c) # diagonal of L * S * LT
-   softmax(b_diag, tb) + softmax(l_diag, tl) 
+   softmax(b_diag, tb) + softmax(l_diag, tl)
 end
 
 
@@ -333,10 +345,10 @@ function line_search(params::FFSParams,
       (status, lower) = check_pos_def(candidate)
       if status
           fcurr = objective(params, Sigma(candidate, lower), tb=tb, tl=tl)
-	  if fcurr <= fprev + alpha * dec * dot(direction, gradient)
-	      result = Sigma(candidate, lower)
-	      done = true
-	  end
+	      if fcurr <= fprev + alpha * dec * dot(direction, gradient)
+	          result = Sigma(candidate, lower)
+	          done = true
+	      end
       end
       alpha = alpha * beta
    end
