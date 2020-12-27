@@ -9,6 +9,11 @@ const COL = 2 # second dimension is COL
 ##  Types for FFS
 ###########################
 
+ struct FFSException <: Exception
+    msg::String
+ end
+
+
 """
 Base type for L and B matrices. Extend this for subtypes that have fast
     maxtrix operations for ``L S L' `` and/or ``B' S^{-1} B``
@@ -58,7 +63,8 @@ The default structure for a dense matrix
 struct FFSDenseMatrix <: FFSMatrix
    mat::Matrix{Float64}
 end
-
+Base.size(x::FFSDenseMatrix) = size(x.mat)
+Base.size(x::FFSDenseMatrix, y::Int64) = size(x.mat, y)
 Base.:*(M::FFSDenseMatrix, A::Matrix{Float64}) = M.mat * A
 Base.:*(A::Matrix{Float64}, M::FFSDenseMatrix) = A * M.mat
 """
@@ -77,11 +83,15 @@ end
 #####################################
 
 # Identity matrix for FFS. The identity matrix is a singleton called FFSId
-abstract type FFSId <: FFSMatrix end
-Base.:*(M::Type{FFSId}, A::Matrix{Float64}) = M.mat * A
-Base.:*(A::Matrix{Float64}, M::Type{FFSId}) = A * M.mat
-weightedLTL(L::Type{FFSId}, weights::Vector{Float64})::Matrix{Float64} = diagm(weights)
-function diag_prod(L::Type{FFSId},
+struct FFSId <: FFSMatrix
+    size::Int64
+end
+Base.size(x::FFSId) = x.size
+Base.size(x::FFSId, y::Int64) = size(I(x.size),y)
+Base.:*(M::FFSId, A::Matrix{Float64}) = M.mat * A
+Base.:*(A::Matrix{Float64}, M::FFSId) = A * M.mat
+weightedLTL(L::FFSId, weights::Vector{Float64})::Matrix{Float64} = diagm(weights)
+function diag_prod(L::FFSId,
                    S::Matrix{Float64},
                    c::Union{Float64, Vector{Float64}})::Vector{Float64}
     diag(S) ./ c
@@ -336,16 +346,16 @@ function line_search(params::FFSParams,
    # beta is the candidate step size multiplier
 
    alpha = 1.0
-   fcurr = objective(params, S, tb=tb, tl=tl)
+   foriginal = objective(params, S, tb=tb, tl=tl)
+   fcurr = foriginal
    done = false
    result = S
    while !done
-      fprev = fcurr
       candidate = direction * alpha + S.cov
       (status, lower) = check_pos_def(candidate)
       if status
           fcurr = objective(params, Sigma(candidate, lower), tb=tb, tl=tl)
-	      if fcurr <= fprev + alpha * dec * dot(direction, gradient)
+	      if fcurr <= foriginal + alpha * dec * dot(direction, gradient)
 	          result = Sigma(candidate, lower)
 	          done = true
 	      end
@@ -386,8 +396,25 @@ function ffs_optimize()
     #TODO
 end
 
-function initialize()
-  #TODO
+"""
+Creates an initial covarinace matrix. Q is either the identity or a guess
+for the covariance. Hence the Q should be a symmetric positive definite
+square matrix having the same
+number of rows as B
+"""
+function initialize(params::FFSParams; Q=I(size(params.B,ROW)*1.0), fudge = 0.99)::Sigma
+    if size(Q) != (size(params.B,ROW), size(params.B,ROW))
+        throw(FFSException("Q must be square matrix with same number of rows as B"))
+    elseif Q != Q'
+        throw(FFSException("Q must be symmetric"))
+    end
+    cov = fudge * enforce_ffs(params.L, symmetrize(collect(Q)), params.c)
+    (ispd, lower) = check_pos_def(cov)
+    if ispd
+        Sigma(cov,lower)
+    else
+        throw(FFSException("Initial Matrix Q is not symmetric positive definite"))
+    end
 end
 
 ############################################
@@ -429,7 +456,9 @@ matrix.
 """
 function privacy_cost(B::FFSMatrix, cov::CovType)::Float64
     (result, lower) = check_pos_def(cov)
-    @assert result "Covariance must be positive definite"
+    if !result
+        throw(FFSException("Covariance must be positive definite"))
+    end
     profile = diag_inv_prod(B, Sigma(cov, lower))
     cost = sqrt(maximum(profile))
     cost
@@ -443,7 +472,9 @@ Returns the variance of each workload query for the Gaussian mechanism
 """
 function l2error_vector(L::FFSMatrix, cov::CovType)::Vector{Float64}
     (result, lower) = check_pos_def(cov)
-    @assert result "Covariance must be positive definite"
+    if !result
+        throw(FFSException("Covariance must be positive definite"))
+    end
     l_vec = diag_prod(L, Sigma(cov, lower), 1.0)
     l_vec
 end
@@ -479,5 +510,6 @@ export ffs_optimize,
        l2error_vector,
        ffs_overrun,
        enforce_pcost,
-       enforce_ffs
+       enforce_ffs,
+       FFSException
 end
