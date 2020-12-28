@@ -24,7 +24,7 @@ ls_dec: paramter for line search sufficient decrease condition
 ls_beta: step size multiplier in line search
 fudge: initialization parameter
 """
-struct FFSTuningParams 
+struct FFSTuningParams
     maxiter::Int64
     nttol::Float64
     gaptol::Float64
@@ -84,58 +84,9 @@ struct Sigma
    Sigma(c, l) = new(c, l, l \ I)
 end
 
-
-########################################
-# Subtypes of FFSMatrix and
-# overloaded multiplication operations
-# and overloaded weightedLTL
-########################################
-"""
-The default structure for a dense matrix
-"""
-struct FFSDenseMatrix <: FFSMatrix
-   mat::Matrix{Float64}
-end
-Base.size(x::FFSDenseMatrix) = size(x.mat)
-Base.size(x::FFSDenseMatrix, y::Int64) = size(x.mat, y)
-Base.:*(M::FFSDenseMatrix, A::Matrix{Float64}) = M.mat * A
-Base.:*(A::Matrix{Float64}, M::FFSDenseMatrix) = A * M.mat
-"""
-For each row v_i of L, computes ``sum_i weights[i] v_i' v``
-which is the same as ``L' diag(weights) L``.
-"""
-weightedLTL(L::FFSDenseMatrix, weights::Vector{Float64})::Matrix{Float64} = (weights' .* L.mat') * L.mat
-
-function diag_prod(L::FFSDenseMatrix,
-                   S::Matrix{Float64},
-                   c::Union{Float64, Vector{Float64}})::Vector{Float64}
-    result = sum((L.mat * S) .* L.mat, dims=COL) ./ c
-    reshape(result, :) # from m x 1 matrix to col vecctor
-end
-
-#####################################
-
-# Identity matrix for FFS. The identity matrix is a singleton called FFSId
-struct FFSId <: FFSMatrix
-    size::Int64
-end
-Base.size(x::FFSId) = x.size
-Base.size(x::FFSId, y::Int64) = size(I(x.size),y)
-Base.:*(M::FFSId, A::Matrix{Float64}) = M.mat * A
-Base.:*(A::Matrix{Float64}, M::FFSId) = A * M.mat
-weightedLTL(L::FFSId, weights::Vector{Float64})::Matrix{Float64} = diagm(weights)
-function diag_prod(L::FFSId,
-                   S::Matrix{Float64},
-                   c::Union{Float64, Vector{Float64}})::Vector{Float64}
-    diag(S) ./ c
-end
+include("FFSMatrix.jl")
 
 
-#TODO test
-#TODO prefix
-#TODO marginals
-#TODO range queries
-#TODO unions
 
 ######################################
 # Helper methods with
