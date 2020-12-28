@@ -91,4 +91,24 @@ end
     fudge = rand()
     S = Fitness.initialize(params, Q=tmp' * tmp + 0.01 * I, fudge=fudge)
     @test maximum(diag(Lrand * S.cov * Lrand') ./ c) ≈ fudge atol=tolerance
+    S = Fitness.initialize(params, fudge=fudge)
+    @test maximum(diag(Lrand * S.cov * Lrand') ./ c) ≈ fudge atol=tolerance
+end
+
+@testset "two d optimization" begin
+    rtol = 0.01
+    Bmat1 = [1. 1; 1 0]
+    Lmat1 = [1 0; 0 1]
+    c1 = [1.0, 1.0]
+    cov1 = ffs_optimize(B=FFSDenseMatrix(Bmat1), L=FFSDenseMatrix(Lmat1), c=c1)
+    @test cov1 ≈ [1.0 0.5; 0.5 1.0] rtol=rtol
+    @test privacy_cost(Bmat1, cov1) ≈ sqrt(4/3) rtol=rtol
+
+    Bmat2 = [1. 0; 0 1]
+    Lmat2 = [1 1; 1 0]
+    c2 = [2.0, 2.0]
+    cov2 = ffs_optimize(B=FFSDenseMatrix(Bmat2), L=FFSDenseMatrix(Lmat2), c=c2)
+
+    @test privacy_cost(Bmat2, cov2 / 2) ≈ sqrt(4/3) rtol=rtol
+    @test Lmat2 * cov2/2 * Lmat2' ≈ Lmat1 * cov1 * Lmat1' rtol=rtol
 end

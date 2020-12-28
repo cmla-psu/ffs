@@ -24,7 +24,7 @@ ls_dec: paramter for line search sufficient decrease condition
 ls_beta: step size multiplier in line search
 fudge: initialization parameter
 """
-struct FFSTuningParams #TODO test
+struct FFSTuningParams 
     maxiter::Int64
     nttol::Float64
     gaptol::Float64
@@ -444,8 +444,7 @@ function ffs_optimize(;B::FFSMatrix,
     tl = 1.0
     m = size(L, ROW) #number of workload queries
     d = size(B, COL) #size of data domain
-    #TODO test
-    for i in 1:maxiter
+    for i in 1:tune.maxiter
         ginfo = ffs_gradient(params, S, tb=tb, tl=tl)
         direction = conjugate_gradient(ginfo, params, S, tune.cg_iter,
                                        tb=tb, tl=tl, tol2=tune.cg_tol)
@@ -461,7 +460,7 @@ function ffs_optimize(;B::FFSMatrix,
                             tl=tl, dec=tune.ls_dec, beta=tune.ls_beta)
         end
     end
-    S.cov
+    enforce_ffs(L, S.cov, c)
 end
 
 
@@ -474,7 +473,7 @@ for the covariance. Hence the Q should be a symmetric positive definite
 square matrix having the same
 number of rows as B
 """
-function initialize(params::FFSParams; Q=I(size(params.B,ROW)*1.0), fudge = 0.99)::Sigma
+function initialize(params::FFSParams; Q=I(size(params.B,ROW))*1.0, fudge = 0.99)::Sigma
     if size(Q) != (size(params.B,ROW), size(params.B,ROW))
         throw(FFSException("Q must be square matrix with same number of rows as B"))
     elseif Q != Q'
@@ -535,6 +534,7 @@ function privacy_cost(B::FFSMatrix, cov::CovType)::Float64
     cost = sqrt(maximum(profile))
     cost
 end
+privacy_cost(B::Matrix{Float64}, cov::CovType)::Float64 = privacy_cost(FFSDenseMatrix(B), cov)
 
 
 """
@@ -550,6 +550,7 @@ function l2error_vector(L::FFSMatrix, cov::CovType)::Vector{Float64}
     l_vec = diag_prod(L, Sigma(cov, lower), 1.0)
     l_vec
 end
+l2_error_vector(L::Matrix{Float64}, cov::CovType)::Vector{Float64} = l2_error_vector(FFSDenseMatrix(L), cov)
 
 
 """
@@ -569,6 +570,7 @@ function ffs_overrun(L::FFSMatrix,
     l_vec = l2error_vector(L, cov) ./ c
     maximum(l_vec)
 end
+ffs_overrun(L::Matrix{Float64}, cov::CovType, c::Union{Float64, Vector{Float64}})::Float64 = ffs_overrun(FFSDenseMatrix(L), cov, c)
 
 ###########################################
 # Exports
