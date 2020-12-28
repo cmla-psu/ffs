@@ -7,6 +7,7 @@ const COL=1
 
 @testset "test_fast_helpers_functions" begin
     tolerance = 1e-6
+    rtol = 1e-6
     B = [1. 1. 1. 1.; 1. 1. 1. 0.; 1. 1. 0. 0.; 1. 0. 0. 0.]
     BT = FFSDenseMatrix(B)
     L = FFSDenseMatrix([1. 2. 3. 4.; 4. 3. 2. 1.; 1. 0. 0. 1.; 1. 2. 1. 2.; 1. 1. 1. 1.])
@@ -46,7 +47,7 @@ const COL=1
     for i in 1:5
         helperB += invcov2 * B2[:,i] * B2[:,i]' * invcov2 * weightB[i]
     end
-    @test Fitness.weighted_grad_helper_B(FFSDenseMatrix(B2), S2, weightB) ≈ helperB atol=tolerance
+    @test Fitness.weighted_grad_helper_B(FFSDenseMatrix(B2), S2, weightB) ≈ helperB atol=tolerance rtol=rtol
 
     helperL = zeros(4,4)
     for i in 1:8
@@ -197,4 +198,31 @@ end
     @test ffs_overrun(L, cov2, c2) ≈ maximum(LinearAlgebra.diag(Lrand * cov2 * Lrand')./c2) atol = tolerance
 
 
+end
+
+@testset "Tuning Parameters Constructor" begin
+    nttol = 0.01
+    gaptol = 0.02
+    softmu = 3.2
+    ls_dec = 0.03
+    ls_beta = 0.045
+    cg_tol = 0.06
+    cg_iter = 32
+    fudge = 0.07
+    tune = FFSTuningParams(nttol=nttol,
+                   gaptol=gaptol,
+                   softmu=softmu,
+                   ls_dec=ls_dec,
+                   ls_beta=ls_beta,
+                   cg_tol=cg_tol,
+                   cg_iter=cg_iter,
+                   fudge=fudge)
+    @test tune.nttol == nttol
+    @test tune.gaptol == gaptol
+    @test tune.softmu == softmu
+    @test tune.ls_dec == ls_dec
+    @test tune.ls_beta == ls_beta
+    @test tune.cg_tol == cg_tol
+    @test tune.cg_iter == cg_iter
+    @test tune.fudge == fudge
 end

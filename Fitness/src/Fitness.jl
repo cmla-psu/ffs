@@ -16,6 +16,7 @@ const COL = 2 # second dimension is COL
 """
 Tuning parameters for FFS optimization. Must create used named parameters.
 
+maxiter: total number of update steps
 nttol: lower bound for dot(search direction, gradient)
 gaptol: limits size of softmax relatxion (number queries + domainsize)/t
 softmu: multiplier for softmax parameter t
@@ -24,6 +25,7 @@ ls_beta: step size multiplier in line search
 fudge: initialization parameter
 """
 struct FFSTuningParams #TODO test
+    maxiter::Int64
     nttol::Float64
     gaptol::Float64
     softmu::Float64
@@ -32,14 +34,15 @@ struct FFSTuningParams #TODO test
     cg_tol::Float64
     cg_iter::Int64
     fudge::Float64
-    FFSTuningParams(;nttol=0.01,
+    FFSTuningParams(;maxiter=1000,
+                     nttol=0.01,
                      gaptol=0.1,
                      softmu=2.0,
                      ls_dec=0.01,
                      ls_beta=0.5,
                      cg_tol=1e-10,
                      cg_iter=5,
-                     fudge=0.99) = new(nttol,gaptol,softmu,ls_dec,ls_beta,
+                     fudge=0.99) = new(maxiter,nttol,gaptol,softmu,ls_dec,ls_beta,
                                       cg_tol, cg_iter,fudge)
 end
 
@@ -379,12 +382,13 @@ function line_search(params::FFSParams,
    fcurr = foriginal
    done = false
    result = S
+   direction_dot_gradient = dot(direction, gradient)
    while !done
       candidate = direction * alpha + S.cov
       (status, lower) = check_pos_def(candidate)
       if status
           fcurr = objective(params, Sigma(candidate, lower), tb=tb, tl=tl)
-	      if fcurr <= foriginal + alpha * dec * dot(direction, gradient)
+	      if fcurr <= foriginal + alpha * dec * direction_dot_gradient
 	          result = Sigma(candidate, lower)
 	          done = true
 	      end
@@ -436,7 +440,27 @@ function ffs_optimize(;B::FFSMatrix,
     end
     params = FFSParams(B, L, c)
     S = initialize(params, fudge=tune.fudge)
+    tb = 1.0
+    tl = 1.0
+    m = size(L, ROW) #number of workload queries
+    d = size(B, COL) #size of data domain
     #TODO test
+    for i in 1:maxiter
+        ginfo = ffs_gradient(params, S, tb=tb, tl=tl)
+        direction = conjugate_gradient(ginfo, params, S, tune.cg_iter,
+                                       tb=tb, tl=tl, tol2=tune.cg_tol)
+        if abs(dot(direction, ginfo.gradient)) < tune.nttol
+            gap = (m+d)/tb
+            if gap < tune.gaptol
+                break
+            end
+            tb *= tune.softmu
+            tl *= tune.softmu
+        else
+            S = line_search(params, S, direction, ginfo.gradient, tb=tb,
+                            tl=tl, dec=tune.ls_dec, beta=tune.ls_beta)
+        end
+    end
     S.cov
 end
 
