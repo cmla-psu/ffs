@@ -337,8 +337,9 @@ function line_search(params::FFSParams,
    done = false
    result = S
    direction_dot_gradient = dot(direction, gradient)
+   candidate = zeros(size(direction)) #pre-allocate
    while !done
-      candidate = direction * alpha + S.cov
+      @. candidate = direction * alpha + S.cov
       (status, lower) = check_pos_def(candidate)
       if status
           fcurr = objective(params, Sigma(candidate, lower), tb=tb, tl=tl)

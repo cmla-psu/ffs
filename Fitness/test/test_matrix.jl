@@ -41,7 +41,7 @@ function check_optimize_as_L(f::Fitness.FFSMatrix, realized::Matrix{Float64}, to
     L = f
     L2 = FFSDenseMatrix(realized)
     c = rand(d1) .+ 1
-    time1 = @elapsed cov1 = ffs_optimize(B=B, L=L, c=c, tune=FFSTuningParams(verbose=true))
+    time1 = @elapsed cov1 = ffs_optimize(B=B, L=L, c=c)
     time2 = @elapsed cov2 = ffs_optimize(B=B, L=L2, c=c)
     println("L Optimization for ", typeof(f), " for problem size ", (d1,d2,d3), " is ", time1)
     println("L Optimization for dense matrix for problem size ", (d1,d2,d3), " is ", time2)
@@ -65,7 +65,7 @@ end
 
 
 @testset "FFSId" begin
-    for k in 2:10
+    for k in 10:10
         f = Fitness.FFSId(k)
         realized = collect(I(k)) * 1.0
         check_product(f, realized)
