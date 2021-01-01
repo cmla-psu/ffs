@@ -11,9 +11,10 @@
 # 3. Overload Base.:*(ffsmat, Matrix) and Base.*:(Matrix, ffsmat), left and right multiplication by matrix
 # 4. Overload weightedLTL(L::FFSMatrix, weights::Vector{Float64})::Matrix{Float64}
 #      That computes sum_i weights[i] v_i' v_i where v_i is a row of L. This is
-#      the same as L' diag(weights) L
+#      the same as L' diagm(weights) L
 # 5. Overload diag_prod(L::FFSMatrix, S::Matrix{Float64}, c::Union{Float64, Vector{Float64}})::Vector{Float64}
 #      which returns the (diagonal of L S L') divided pointwise by c. S is symmetric positive definite
+#      The other method where S is a Sigma is not necessary to overload
 # 6. Optional: overload other functions such as
 #      a) diag_prod where S has type Sigma (so cholesky decomposition is available)
 #      b) diag_inv_prod
@@ -35,7 +36,7 @@ Base.:*(M::FFSDenseMatrix, A::Matrix{Float64}) = M.mat * A
 Base.:*(A::Matrix{Float64}, M::FFSDenseMatrix) = A * M.mat
 """
 For each row v_i of L, computes ``sum_i weights[i] v_i' v_i``
-which is the same as ``L' diag(weights) L``.
+which is the same as ``L' diagm(weights) L``.
 """
 weightedLTL(L::FFSDenseMatrix, weights::Vector{Float64})::Matrix{Float64} = L.mat' * diagm(weights) * L.mat #(weights' .* L.mat') * L.mat
 
@@ -52,10 +53,14 @@ end
 struct FFSId <: FFSMatrix
     size::Int64
 end
-Base.size(x::FFSId) = x.size
-Base.size(x::FFSId, y::Int64) = size(I(x.size),y)
-Base.:*(M::FFSId, A::Matrix{Float64}) = M.mat * A
-Base.:*(A::Matrix{Float64}, M::FFSId) = A * M.mat
+Base.size(x::FFSId) = (x.size, x.size)
+Base.size(x::FFSId, y::Int64) = if y==1 || y==2
+                                   x.size
+                               else
+                                   1
+                               end
+Base.:*(M::FFSId, A::Matrix{Float64}) =  A
+Base.:*(A::Matrix{Float64}, M::FFSId) = A
 weightedLTL(L::FFSId, weights::Vector{Float64})::Matrix{Float64} = diagm(weights)
 function diag_prod(L::FFSId,
                    S::Matrix{Float64},
@@ -64,9 +69,8 @@ function diag_prod(L::FFSId,
 end
 
 
-#TODO test
 #TODO prefix
 #TODO marginals
-#TODO range queries
 #TODO unions
 #TODO sparse matrix
+#TODO range queries

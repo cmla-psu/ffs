@@ -1,6 +1,6 @@
 module Fitness
 using LinearAlgebra
-
+import Dates
 
 const START = 1 #starting index
 const ROW = 1 # first dimension is ROW
@@ -23,6 +23,7 @@ softmu: multiplier for softmax parameter t
 ls_dec: paramter for line search sufficient decrease condition
 ls_beta: step size multiplier in line search
 fudge: initialization parameter
+verbose: whether to print extra information
 """
 struct FFSTuningParams
     maxiter::Int64
@@ -34,6 +35,7 @@ struct FFSTuningParams
     cg_tol::Float64
     cg_iter::Int64
     fudge::Float64
+    verbose::Bool
     FFSTuningParams(;maxiter=1000,
                      nttol=0.01,
                      gaptol=0.1,
@@ -42,8 +44,9 @@ struct FFSTuningParams
                      ls_beta=0.5,
                      cg_tol=1e-10,
                      cg_iter=5,
-                     fudge=0.99) = new(maxiter,nttol,gaptol,softmu,ls_dec,ls_beta,
-                                      cg_tol, cg_iter,fudge)
+                     fudge=0.99,
+                     verbose=false) = new(maxiter,nttol,gaptol,softmu,ls_dec,ls_beta,
+                                      cg_tol, cg_iter,fudge,verbose)
 end
 
 
@@ -107,7 +110,7 @@ For dense matrices, we compute the squared norm of each row of ``L * lower``,
 where `lower` is the lower triangular matrix of the cholesky decomposition
 of the covariance `S`.
 """
-function diag_prod(L::FFSDenseMatrix,
+function diag_prod(L::FFSMatrix,
                    S::Sigma,
                    c::Union{Float64, Vector{Float64}})::Vector{Float64}
 
@@ -132,7 +135,7 @@ by solving ``lower x = B``,
 where ``lower`` is the lower triangular matrix of the cholesky decomposition
 of the covariance `S`.
 """
-function diag_inv_prod(B::FFSDenseMatrix, S::Sigma)::Vector{Float64}
+function diag_inv_prod(B::FFSMatrix, S::Sigma)::Vector{Float64}
    col_sq_norm(S.lowerinv * B)
 end
 
@@ -400,8 +403,10 @@ function ffs_optimize(;B::FFSMatrix,
         direction = conjugate_gradient(ginfo, params, S, tune.cg_iter,
                                        tb=tb, tl=tl, tol2=tune.cg_tol)
         if abs(dot(direction, ginfo.gradient)) < tune.nttol
+            if tune.verbose @info "$(Dates.now()) Update less than nttol at iteration $i" end
             gap = (m+d)/tb
             if gap < tune.gaptol
+                if tune.verbose @info "$(Dates.now()) Gap tol reached at iteration $i" end
                 break
             end
             tb *= tune.softmu

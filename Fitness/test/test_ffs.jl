@@ -6,7 +6,7 @@ const ROW=1
 const COL=1
 
 @testset "test_fast_helpers_functions" begin
-    tolerance = 1e-6
+    tolerance = 1e-5
     rtol = 1e-6
     B = [1. 1. 1. 1.; 1. 1. 1. 0.; 1. 1. 0. 0.; 1. 0. 0. 0.]
     BT = FFSDenseMatrix(B)
@@ -209,6 +209,7 @@ end
     cg_tol = 0.06
     cg_iter = 32
     fudge = 0.07
+    verbose=true
     tune = FFSTuningParams(nttol=nttol,
                    gaptol=gaptol,
                    softmu=softmu,
@@ -216,7 +217,8 @@ end
                    ls_beta=ls_beta,
                    cg_tol=cg_tol,
                    cg_iter=cg_iter,
-                   fudge=fudge)
+                   fudge=fudge,
+                   verbose=verbose)
     @test tune.nttol == nttol
     @test tune.gaptol == gaptol
     @test tune.softmu == softmu
@@ -225,4 +227,5 @@ end
     @test tune.cg_tol == cg_tol
     @test tune.cg_iter == cg_iter
     @test tune.fudge == fudge
+    @test tune.verbose == verbose
 end
